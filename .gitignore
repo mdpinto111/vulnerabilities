@@ -1,0 +1,26 @@
+# Instantanés de données réelles — NE PAS VERSIONNER.
+# Ces fichiers contiennent la cartographie des vulnérabilités non corrigées
+# (CVE critiques, workloads de production, projets, emails de responsables).
+# Les publier reviendrait à diffuser une feuille de route d'attaque.
+dashboard.html
+dashboard_data.json
+deployed_worklist.json
+
+# Sorties de travail
+_*.json
+_*.js
+_*.py
+*.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Éditeurs / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store

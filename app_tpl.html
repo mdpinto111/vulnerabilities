@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Triage Vulnérabilités — my-gcp-project</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap">
+<style>
+:root{
+  color-scheme:light;
+  --ground:#F2F4F0; --surface:#FFFFFF; --surface-2:#FAFBF8;
+  --ink:#171A1B; --ink-2:#414A4C; --muted:#6B7477; --line:#DEE2DB; --line-2:#EBEEE8;
+  --crit:#C4362C; --crit-soft:#F6E4E1; --high:#0E7BAE; --high-soft:#E0EDF4;
+  --calm:#4C7A5A; --shadow:0 1px 2px rgba(23,26,27,.05),0 4px 12px rgba(23,26,27,.04);
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+  --cond:"IBM Plex Sans Condensed","IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;
+  --ground:#121513; --surface:#1A1E1B; --surface-2:#1F2420;
+  --ink:#E9EBE6; --ink-2:#BFC5BE; --muted:#8A928C; --line:#2C322D; --line-2:#242A26;
+  --crit:#D65A48; --crit-soft:#3A201C; --high:#3AA0D0; --high-soft:#132833;
+  --calm:#7FB08D; --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#121513; --surface:#1A1E1B; --surface-2:#1F2420;
+  --ink:#E9EBE6; --ink-2:#BFC5BE; --muted:#8A928C; --line:#2C322D; --line-2:#242A26;
+  --crit:#D65A48; --crit-soft:#3A201C; --high:#3AA0D0; --high-soft:#132833;
+  --calm:#7FB08D; --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+img{max-width:100%}
+[hidden]{display:none!important}
+.wrap{max-width:1180px;margin:0 auto;padding-block:26px 56px;padding-left:20px;padding-right:20px}
+h1,h2,h3{margin:0;font-family:var(--cond);font-weight:600;text-wrap:balance;letter-spacing:-.01em}
+.eyebrow{font-family:var(--cond);font-size:11px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* barre d'etat collante */
+.bar{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--ground) 88%,transparent);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.barin{max-width:1180px;margin:0 auto;padding:9px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:space-between}
+.state{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--calm);box-shadow:0 0 0 3px color-mix(in srgb,var(--calm) 22%,transparent);flex:none}
+.dot.cached{background:var(--muted);box-shadow:0 0 0 3px color-mix(in srgb,var(--muted) 20%,transparent)}
+@media (prefers-reduced-motion:no-preference){.dot:not(.cached){animation:p 2.6s ease-in-out infinite}}
+@keyframes p{0%,100%{opacity:1}50%{opacity:.42}}
+.sep{color:var(--line);user-select:none}
+button.rf{font-family:var(--sans);font-size:12px;font-weight:500;padding:6px 14px;border-radius:3px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;
+  display:inline-flex;align-items:center;gap:7px;transition:.12s}
+button.rf:hover{border-color:var(--ink-2)}
+button.rf:focus-visible{outline:2px solid var(--high);outline-offset:2px}
+button.rf[disabled]{opacity:.55;cursor:wait}
+.barctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.perlab{font-size:11.5px;color:var(--muted);white-space:nowrap}
+select.per{font-family:var(--sans);font-size:12px;padding:5px 9px;border-radius:3px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+select.per:focus-visible{outline:2px solid var(--high);outline-offset:2px}
+.spin{width:11px;height:11px;border:2px solid var(--line);border-top-color:var(--ink-2);border-radius:50%;flex:none}
+@media (prefers-reduced-motion:no-preference){button.rf[disabled] .spin{animation:s .7s linear infinite}}
+@keyframes s{to{transform:rotate(360deg)}}
+
+header{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;justify-content:space-between;padding-bottom:18px;border-bottom:1px solid var(--line)}
+header h1{font-size:27px;line-height:1.15}
+header p{margin:5px 0 0;color:var(--muted);font-size:13px;max-width:56ch}
+.scan{font-family:var(--mono);font-size:12px;color:var(--ink-2);white-space:nowrap}
+
+.verdict{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;margin-top:26px}
+@media(max-width:720px){.verdict{grid-template-columns:1fr}}
+.vcard{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:20px 22px;box-shadow:var(--shadow)}
+.vcard.act{border-left:3px solid var(--crit)}
+.vcard.wait{border-left:3px solid var(--line);background:var(--surface-2);box-shadow:none}
+.vnum{font-family:var(--cond);font-size:56px;font-weight:700;line-height:.95;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.vcard.act .vnum{color:var(--crit)}
+.vcard.wait .vnum{color:var(--ink-2)}
+.vlabel{font-family:var(--cond);font-size:17px;font-weight:600;margin-top:9px}
+.vsub{color:var(--muted);font-size:13px;margin-top:5px;max-width:46ch}
+.vsplit{display:flex;gap:18px;margin-top:15px;padding-top:14px;border-top:1px solid var(--line-2);flex-wrap:wrap}
+.vsplit div{font-size:12px;color:var(--muted)}
+.vsplit b{display:block;font-family:var(--mono);font-size:19px;font-weight:600;color:var(--ink);letter-spacing:-.02em}
+.sev-c{color:var(--crit)!important} .sev-h{color:var(--high)!important}
+
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px}
+@media(max-width:860px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:14px 16px}
+.kpi b{display:block;font-family:var(--cond);font-size:28px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.1}
+.kpi span{display:block;font-size:12px;color:var(--muted);margin-top:3px;line-height:1.35}
+
+section{margin-top:34px}
+.shead{margin-bottom:13px}
+.shead h2{font-size:19px}
+.shead p{margin:3px 0 0;color:var(--muted);font-size:13px;max-width:70ch}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:18px 20px;box-shadow:var(--shadow)}
+.grid2{display:grid;grid-template-columns:1.15fr 1fr;gap:14px}
+@media(max-width:860px){.grid2{grid-template-columns:1fr}}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+.lg{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)}
+.sw{width:13px;height:3px;border-radius:2px}
+.sw.d{height:0;border-top:2px dashed currentColor;width:15px}
+.chartbox{position:relative}
+svg{display:block;width:100%;height:auto;overflow:visible}
+.tip{position:absolute;pointer-events:none;opacity:0;transition:opacity .12s;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:8px 10px;font-size:12px;box-shadow:var(--shadow);z-index:5;min-width:130px}
+.tip b{font-family:var(--cond);font-size:13px;display:block;margin-bottom:4px}
+.tip .r{display:flex;justify-content:space-between;gap:14px;font-family:var(--mono);font-size:11px}
+
+.bars{display:flex;flex-direction:column;gap:9px}
+.brow{display:grid;grid-template-columns:118px 1fr 52px;gap:10px;align-items:center}
+@media(max-width:520px){.brow{grid-template-columns:92px 1fr 44px}}
+.bname{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btrack{height:17px;display:flex;gap:2px;align-items:center}
+.bseg{height:100%;transition:opacity .12s}
+.bseg:first-child{border-radius:2px 0 0 2px}
+.bseg:last-child{border-radius:0 4px 4px 0}
+.bseg.only{border-radius:2px 4px 4px 2px}
+.brow:hover .bseg{opacity:.78}
+.bval{font-family:var(--mono);font-size:12px;color:var(--ink-2);text-align:right;font-variant-numeric:tabular-nums}
+
+/* recherche */
+.searchrow{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+#q{flex:1;min-width:0;font-family:var(--sans);font-size:13px;padding:9px 12px;
+  border:1px solid var(--line);border-radius:3px;background:var(--surface);color:var(--ink)}
+#q::placeholder{color:var(--muted);opacity:.85}
+#q:focus{outline:none;border-color:var(--high);box-shadow:0 0 0 3px color-mix(in srgb,var(--high) 15%,transparent)}
+button.clr{font-family:var(--sans);font-size:12px;padding:8px 12px;border-radius:3px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;white-space:nowrap}
+button.clr:hover{border-color:var(--ink-2)}
+mark{background:color-mix(in srgb,var(--high) 26%,transparent);color:inherit;border-radius:2px;padding:0 1px}
+/* bandeau de periode active */
+#pernotice{margin-top:20px;padding:13px 17px;border:1px solid var(--line);
+  border-left:3px solid var(--high);border-radius:4px;background:var(--surface);
+  font-size:13px;color:var(--ink-2);line-height:1.55}
+#pernotice b{font-family:var(--cond);color:var(--ink)}
+#pernotice.rien{border-left-color:var(--muted)}
+.vide{padding:26px 20px;text-align:center;color:var(--muted);font-size:13px;line-height:1.6}
+.vide b{display:block;font-family:var(--cond);font-size:15px;color:var(--ink);margin-bottom:5px}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.filters label{font-size:12px;color:var(--muted);margin-right:2px}
+button.f{font-family:var(--sans);font-size:12px;font-weight:500;padding:5px 11px;border-radius:3px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;transition:.12s}
+button.f:hover{border-color:var(--ink-2)}
+button.f[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+button.f:focus-visible{outline:2px solid var(--high);outline-offset:2px}
+.tscroll{overflow-x:auto;border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:800px;font-size:13px}
+th{font-family:var(--cond);font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--surface-2);white-space:nowrap}
+th.n{text-align:right}
+td{padding:10px 12px;border-bottom:1px solid var(--line-2);vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover{background:var(--surface-2)}
+td.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12.5px}
+.iname{font-family:var(--mono);font-size:12px;color:var(--ink);word-break:break-word}
+.repo{font-size:11px;color:var(--muted);font-family:var(--mono)}
+.wlc{font-size:11.5px;color:var(--muted);max-width:230px;line-height:1.4}
+.pill{display:inline-block;font-family:var(--cond);font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:2px;white-space:nowrap}
+.pill.cr{background:var(--crit-soft);color:var(--crit)} .pill.gke{background:var(--high-soft);color:var(--high)}
+.tagd{font-size:10.5px;color:var(--muted);font-family:var(--mono)}
+.cn{color:var(--crit);font-weight:600} .hn{color:var(--high)}
+.zero{color:var(--muted);opacity:.45}
+/* ligne depliable + detail des workloads */
+tr.main{cursor:pointer}
+tr.main:focus-visible{outline:2px solid var(--high);outline-offset:-2px}
+.tw{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;color:var(--ink-2)}
+.caret{display:inline-block;width:0;height:0;border-left:4px solid currentColor;border-top:3.5px solid transparent;border-bottom:3.5px solid transparent;transition:transform .14s;color:var(--muted);flex:none}
+tr.main[aria-expanded="true"] .caret{transform:rotate(90deg)}
+.prodbadge{display:inline-block;font-family:var(--cond);font-size:10px;font-weight:700;letter-spacing:.07em;padding:1px 6px;border-radius:2px;background:var(--crit);color:#fff;white-space:nowrap}
+tr.detail>td{background:var(--surface-2);padding:0 12px 14px;border-bottom:1px solid var(--line)}
+.projgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:4px}
+.projcard{border:1px solid var(--line);border-radius:3px;background:var(--surface);padding:11px 13px}
+.projcard.isprod{border-left:3px solid var(--crit)}
+.projhead{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:3px}
+.projname{font-family:var(--mono);font-size:11.5px;font-weight:500;color:var(--ink);word-break:break-all}
+.projmeta{font-size:10.5px;color:var(--muted);font-family:var(--mono);margin-bottom:7px;word-break:break-all}
+.wlist{display:flex;flex-direction:column;gap:9px}
+.witem{display:flex;flex-direction:column;gap:3px}
+.witem+.witem{border-top:1px solid var(--line-2);padding-top:8px}
+.wrow{display:flex;align-items:baseline;gap:7px;font-size:11.5px;flex-wrap:wrap}
+.wrow a{font-family:var(--mono);color:var(--high);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--high) 30%,transparent);word-break:break-all}
+.wrow a:hover{border-bottom-color:var(--high)}
+.wtag{font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:2px;background:var(--high-soft);color:var(--high);white-space:nowrap}
+.wtag.none{background:transparent;color:var(--muted);opacity:.6;padding-left:0}
+/* labels du workload */
+.labs{display:flex;flex-wrap:wrap;gap:4px}
+.lab{display:inline-flex;align-items:baseline;gap:4px;font-family:var(--mono);font-size:10px;
+  padding:1px 6px;border-radius:2px;border:1px solid var(--line);background:var(--surface-2);
+  color:var(--ink-2);max-width:100%;overflow:hidden}
+.lab k{font-style:normal;color:var(--muted)}
+.lab v{font-style:normal;color:var(--ink);word-break:break-all}
+.lab.env{border-color:color-mix(in srgb,var(--crit) 40%,var(--line));background:var(--crit-soft)}
+.lab.env v{color:var(--crit);font-weight:600}
+.lab.env.np{border-color:var(--line);background:var(--surface-2)}
+.lab.env.np v{color:var(--ink-2);font-weight:500}
+.nolab{font-size:10.5px;color:var(--muted);opacity:.7;font-style:italic}
+a.ar{color:var(--high);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--high) 35%,transparent)}
+a.ar:hover{border-bottom-color:var(--high)}
+footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:11.5px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <div class="barin">
+    <div class="state">
+      <span class="dot" id="dot" aria-hidden="true"></span>
+      <span id="freshness"></span>
+      <span class="sep">|</span>
+      <span id="qtime"></span>
+    </div>
+    <div class="barctl">
+      <label class="perlab" for="periode">Dernier signalement</label>
+      <select id="periode" class="per"></select>
+      <button class="rf" id="refresh">
+        <span class="spin" aria-hidden="true"></span>
+        <span id="rflabel">Rafraîchir</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+<header>
+  <div>
+    <div class="eyebrow">my-gcp-project &middot; Artifact Registry</div>
+    <h1>Triage des vulnérabilités</h1>
+    <p>Ce que Security Command Center a trouvé sur vos images, trié par une seule question&nbsp;: l'image tourne-t-elle vraiment quelque part&nbsp;?</p>
+  </div>
+  <div class="scan">Dernier finding&nbsp;: <span id="scan"></span></div>
+</header>
+
+<div id="pernotice" hidden></div>
+
+<div class="verdict">
+  <div class="vcard act">
+    <div class="eyebrow" style="color:var(--crit)">À traiter</div>
+    <div class="vnum" id="v-dep">—</div>
+    <div class="vlabel">vulnérabilités sur des images en cours d'exécution</div>
+    <div class="vsub">Réparties sur <span id="v-img">—</span> images et <span id="v-wl">—</span> workloads Cloud&nbsp;Run et GKE. C'est le seul périmètre réellement exposé.</div>
+    <div class="vsplit">
+      <div><b class="sev-c" id="v-dc">—</b>critiques</div>
+      <div><b class="sev-h" id="v-dh">—</b>élevées</div>
+      <div><b id="v-dfix">—</b>avec correctif publié</div>
+    </div>
+  </div>
+  <div class="vcard wait">
+    <div class="eyebrow">Sans exposition</div>
+    <div class="vnum" id="v-nodep">—</div>
+    <div class="vlabel">sur des images stockées mais non déployées</div>
+    <div class="vsub">Anciens builds et images intermédiaires. À nettoyer par une politique de rétention, pas en urgence.</div>
+    <div class="vsplit">
+      <div><b id="v-ndc">—</b>critiques</div>
+      <div><b id="v-ndh">—</b>élevées</div>
+      <div><b id="v-ndfix">—</b>avec correctif publié</div>
+    </div>
+  </div>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><b id="k1">—</b><span>images déployées à corriger</span></div>
+  <div class="kpi"><b id="k2" class="cn">—</b><span>dont images portant au moins une faille critique</span></div>
+  <div class="kpi"><b id="k3">—</b><span>corrigeables par simple mise à jour de paquet</span></div>
+  <div class="kpi"><b id="k4" class="cn">—</b><span id="k4l">workloads en production concernés</span></div>
+</div>
+
+<section>
+  <div class="shead">
+    <h2>Le levier principal</h2>
+    <p>Vulnérabilités corrigeables sur images déployées, regroupées par paquet. Reconstruire sur une base à jour règle plusieurs centaines de findings d'un coup.</p>
+  </div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="legend">
+        <span class="lg"><span class="sw" style="background:var(--crit)"></span>Critique</span>
+        <span class="lg"><span class="sw" style="background:var(--high)"></span>Élevée</span>
+      </div>
+      <div class="bars" id="bars"></div>
+    </div>
+    <div class="panel">
+      <div class="eyebrow" style="margin-bottom:11px">CVE critiques les plus répandues</div>
+      <div class="bars" id="cvebars"></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="shead">
+    <h2>Rythme des découvertes</h2>
+    <p>Nouvelles vulnérabilités détectées chaque jour, tous dépôts confondus — le flux entrant que la remédiation doit absorber.</p>
+  </div>
+  <div class="panel">
+    <div class="legend">
+      <span class="lg"><span class="sw" style="background:var(--crit)"></span>Critiques</span>
+      <span class="lg" style="color:var(--high)"><span class="sw d"></span><span style="color:var(--ink-2)">Élevées</span></span>
+    </div>
+    <div class="chartbox"><div id="trend"></div><div class="tip" id="tip"></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="shead">
+    <h2>Plan de travail</h2>
+    <p>Une ligne par image déployée, la plus critique en premier. Chaque ligne est un rebuild à planifier.</p>
+  </div>
+  <div class="searchrow">
+    <input id="q" type="search" autocomplete="off" spellcheck="false"
+           placeholder="Rechercher une image, un projet, un workload, un label (ex. owner_email, fileupload-prod, openssl)…"
+           aria-label="Rechercher dans le plan de travail">
+    <button class="clr" id="qclear" hidden aria-label="Effacer la recherche">Effacer</button>
+  </div>
+  <div class="filters">
+    <label>Runtime</label>
+    <button class="f" data-rt="all" aria-pressed="true">Tout</button>
+    <button class="f" data-rt="CLOUD_RUN_REVISION" aria-pressed="false">Cloud Run</button>
+    <button class="f" data-rt="GKE_POD" aria-pressed="false">GKE</button>
+    <label style="margin-left:10px">Filtre</label>
+    <button class="f" data-only="crit" aria-pressed="false">Critiques seulement</button>
+    <button class="f" data-only="prod" aria-pressed="false">Production seulement</button>
+  </div>
+  <p style="color:var(--muted);font-size:12px;margin:-4px 0 10px">Cliquez une ligne pour voir où l'image tourne&nbsp;: projets, workloads, labels et liens console.</p>
+  <div class="tscroll">
+    <table>
+      <thead><tr>
+        <th>Image</th><th>Runtime</th><th>Déploiements</th>
+        <th class="n">Crit.</th><th class="n">Élev.</th><th class="n">CVE</th><th class="n">Corrigeables</th><th>Registry</th>
+      </tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </div>
+  <p style="color:var(--muted);font-size:12px;margin-top:9px" id="tcount"></p>
+</section>
+
+<footer>
+  <span>Security Command Center &middot; BigQuery <span class="mono">scc_findings</span> &middot; me-west1</span>
+  <span class="mono" id="foot"></span>
+</footer>
+</div>
+
+<script>
+var D = __DATA__;
+var ETAT = "__ETAT__";
+function $(s){return document.querySelector(s);}
+function nf(n){return (n||0).toLocaleString('fr-FR');}
+function esc0(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function sum(f,g){return D.matrice.filter(g).reduce(function(a,r){return a+(r[f]||0);},0);}
+
+/* --- barre d'etat --- */
+$('#freshness').textContent = ETAT === 'cache'
+  ? 'donnees en cache (' + D.meta.recupere_a + ')'
+  : 'donnees fraiches (' + D.meta.recupere_a + ')';
+if (ETAT === 'cache') $('#dot').classList.add('cached');
+$('#qtime').textContent = D.meta.duree + ' s de requetes';
+var PER = (D.meta.periode || 'all');
+function allerVers(periode, forcer){
+  var b = $('#refresh');
+  b.disabled = true;
+  $('#rflabel').textContent = 'Interrogation de BigQuery...';
+  location.href = '/?p=' + encodeURIComponent(periode) + (forcer?'&refresh=1':'');
+}
+$('#refresh').addEventListener('click', function(){ allerVers(PER, true); });
+
+/* Selecteur de periode : chaque choix relance les requetes cote serveur. */
+(function(){
+  var sel = $('#periode');
+  sel.innerHTML = (D.meta.periodes||[]).map(function(p){
+    return '<option value="'+p.id+'"'+(p.id===PER?' selected':'')+'>'+p.nom+'</option>';
+  }).join('');
+  sel.addEventListener('change', function(){ allerVers(sel.value, false); });
+})();
+
+/* --- bandeau de periode --- */
+(function(){
+  if(PER==='all') return;
+  var n = $('#pernotice'), nom = D.meta.periode_nom || PER;
+  var total = (D.matrice||[]).reduce(function(a,r){return a+(r.nb||0);},0);
+  n.hidden = false;
+  if(total===0){
+    n.className = 'rien';
+    n.innerHTML = '<b>Aucune vulnérabilité signalée sur « '+esc0(nom)+' ».</b> '
+      + 'Cela ne veut pas dire que le parc est sain : SCC ne réémet ses findings '
+      + 'que par vagues. Repassez sur <b>Tout</b> pour l\'état réel du parc.';
+  } else {
+    n.className = '';
+    n.innerHTML = 'Chiffres restreints aux vulnérabilités <b>signalées sur « '
+      + esc0(nom) + ' »</b> — soit '+total.toLocaleString('fr-FR')+' findings sur '
+      + 'l\'ensemble du parc. Le graphique des découvertes reste sur 30 jours.';
+  }
+})();
+
+/* --- verdict --- */
+var dep = function(r){return r.dep==='DEPLOYED';},
+    nod = function(r){return r.dep==='NOT_DEPLOYED';};
+var depTot = sum('nb',dep), nodTot = sum('nb',nod);
+$('#scan').textContent = D.meta.dernier_scan;
+$('#v-dep').textContent = nf(depTot);
+$('#v-nodep').textContent = nf(nodTot);
+$('#v-dc').textContent = nf(sum('nb',function(r){return dep(r)&&r.sev==='CRITICAL';}));
+$('#v-dh').textContent = nf(sum('nb',function(r){return dep(r)&&r.sev==='HIGH';}));
+$('#v-dfix').textContent = nf(sum('fix',dep));
+$('#v-ndc').textContent = nf(sum('nb',function(r){return nod(r)&&r.sev==='CRITICAL';}));
+$('#v-ndh').textContent = nf(sum('nb',function(r){return nod(r)&&r.sev==='HIGH';}));
+$('#v-ndfix').textContent = nf(sum('fix',nod));
+$('#v-img').textContent = D.worklist.length;
+$('#v-wl').textContent = D.runtime.reduce(function(a,r){return a+(r.wl||0);},0);
+$('#k1').textContent = D.worklist.length;
+$('#k2').textContent = D.worklist.filter(function(r){return r.c>0;}).length;
+$('#k3').textContent = nf(sum('fix',dep));
+(function(){
+  var ws = D.workloads || [];
+  var prod = {}, projs = {};
+  ws.forEach(function(w){
+    if(w.prod){ prod[w.proj+'|'+w.wl]=1; projs[w.proj]=1; }
+  });
+  var n = Object.keys(prod).length, np = Object.keys(projs).length;
+  $('#k4').textContent = n;
+  $('#k4l').textContent = n
+    ? 'workloads en production concernés, dans ' + np + ' projet' + (np>1?'s':'')
+    : 'aucun workload de production concerné';
+  if(!n) $('#k4').classList.remove('cn');
+})();
+$('#foot').textContent = nf(D.meta.images_totales)+' images scannees · '
+  + nf(D.meta.lignes_brutes)+' findings bruts · depuis '+D.meta.date_min;
+
+/* --- barres horizontales --- */
+function drawBars(el, rows, max, fmt){
+  el.innerHTML = rows.map(function(r){
+    var wc = max? r.c/max*100 : 0, wh = max? r.h/max*100 : 0;
+    var one = (r.c===0||r.h===0)?' only':'';
+    return '<div class="brow"><div class="bname" title="'+r.label+'">'+r.label+'</div>'
+      +'<div class="btrack">'
+      +(r.c?'<div class="bseg'+one+'" style="width:'+wc+'%;background:var(--crit)"></div>':'')
+      +(r.h?'<div class="bseg'+one+'" style="width:'+wh+'%;background:var(--high)"></div>':'')
+      +'</div><div class="bval">'+fmt(r)+'</div></div>';
+  }).join('');
+}
+var pk = D.paquets.slice(0,9).map(function(p){return {label:p.n,c:p.c,h:p.h};});
+drawBars($('#bars'), pk, Math.max.apply(null,pk.map(function(p){return p.c+p.h;}).concat([1])), function(r){return nf(r.c+r.h);});
+var cv = D.cves.slice(0,9).map(function(c){return {label:c.id.replace('CVE-',''),c:c.img,h:0};});
+drawBars($('#cvebars'), cv, Math.max.apply(null,cv.map(function(c){return c.c;}).concat([1])), function(r){return r.c+' img';});
+
+/* --- courbe de tendance --- */
+(function(){
+  var data = D.tendance.map(function(d){return {j:d.j,c:d.c,h:d.h,t:Date.parse(d.j)};});
+  if(!data.length){ $('#trend').innerHTML='<p style="color:var(--muted);font-size:13px">Aucune donnee sur 30 jours.</p>'; return; }
+  var W=760,H=250,M={t:20,r:14,b:30,l:46};
+  var iw=W-M.l-M.r, ih=H-M.t-M.b;
+  var ts=data.map(function(d){return d.t;});
+  var t0=Math.min.apply(null,ts), t1=Math.max.apply(null,ts);
+  if(t1===t0) t1=t0+1;
+  var ymax=Math.max.apply(null,data.map(function(d){return Math.max(d.c,d.h);}).concat([1]));
+  var step=ymax>1000?400:(ymax>300?200:50), top=Math.ceil(ymax/step)*step;
+  var X=function(t){return M.l+(t-t0)/(t1-t0)*iw;}, Y=function(v){return M.t+ih-v/top*ih;};
+  var path=function(k){return data.map(function(d,i){return (i?'L':'M')+X(d.t).toFixed(1)+' '+Y(d[k]).toFixed(1);}).join(' ');};
+  var ticks='';
+  for(var v=0;v<=top;v+=step){
+    ticks+='<line x1="'+M.l+'" y1="'+Y(v)+'" x2="'+(W-M.r)+'" y2="'+Y(v)+'" stroke="var(--line-2)" stroke-width="1"/>'
+      +'<text x="'+(M.l-9)+'" y="'+(Y(v)+4)+'" text-anchor="end" font-size="10.5" font-family="IBM Plex Mono,monospace" fill="var(--muted)">'+v+'</text>';
+  }
+  var xt='';
+  [0,Math.floor(data.length*0.25),Math.floor(data.length*0.5),Math.floor(data.length*0.75),data.length-1]
+   .filter(function(v,i,a){return a.indexOf(v)===i;})
+   .forEach(function(i){var d=data[i];if(!d)return;
+    var lbl=new Date(d.t).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+    xt+='<text x="'+X(d.t)+'" y="'+(H-M.b+18)+'" text-anchor="middle" font-size="10.5" font-family="IBM Plex Mono,monospace" fill="var(--muted)">'+lbl+'</text>';});
+  var area='M'+X(data[0].t)+' '+Y(0)+' '+data.map(function(d){return 'L'+X(d.t).toFixed(1)+' '+Y(d.c).toFixed(1);}).join(' ')+' L'+X(data[data.length-1].t)+' '+Y(0)+' Z';
+  var peak=data.reduce(function(a,b){return b.c>a.c?b:a;});
+  $('#trend').innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Nouvelles vulnerabilites par jour sur 30 jours">'
+    +ticks+xt
+    +'<path d="'+area+'" fill="var(--crit)" opacity=".09"/>'
+    +'<path d="'+path('h')+'" fill="none" stroke="var(--high)" stroke-width="2" stroke-dasharray="5 3" stroke-linejoin="round"/>'
+    +'<path d="'+path('c')+'" fill="none" stroke="var(--crit)" stroke-width="2" stroke-linejoin="round"/>'
+    +'<circle cx="'+X(peak.t)+'" cy="'+Y(peak.c)+'" r="4" fill="var(--crit)" stroke="var(--surface)" stroke-width="2"/>'
+    +'<text x="'+X(peak.t)+'" y="'+(Y(peak.c)-11)+'" text-anchor="middle" font-size="11" font-weight="600" font-family="IBM Plex Mono,monospace" fill="var(--crit)">'+peak.c+' crit.</text>'
+    +'<line id="ch" x1="0" y1="'+M.t+'" x2="0" y2="'+(M.t+ih)+'" stroke="var(--ink-2)" stroke-width="1" opacity="0"/>'
+    +'<rect x="'+M.l+'" y="'+M.t+'" width="'+iw+'" height="'+ih+'" fill="transparent"/></svg>';
+  var svg=$('#trend svg'), tip=$('#tip'), ch=svg.querySelector('#ch');
+  svg.addEventListener('pointermove',function(e){
+    var b=svg.getBoundingClientRect(), sx=(e.clientX-b.left)/b.width*W;
+    if(sx<M.l||sx>W-M.r){tip.style.opacity=0;ch.setAttribute('opacity',0);return;}
+    var best=data[0],bd=1e9;
+    data.forEach(function(d){var dd=Math.abs(X(d.t)-sx);if(dd<bd){bd=dd;best=d;}});
+    ch.setAttribute('x1',X(best.t));ch.setAttribute('x2',X(best.t));ch.setAttribute('opacity','.3');
+    tip.style.opacity=1;
+    tip.innerHTML='<b>'+new Date(best.t).toLocaleDateString('fr-FR',{day:'numeric',month:'long'})+'</b>'
+      +'<div class="r"><span style="color:var(--crit)">Critiques</span><span>'+best.c+'</span></div>'
+      +'<div class="r"><span style="color:var(--high)">Elevees</span><span>'+best.h+'</span></div>';
+    var px=X(best.t)/W*b.width;
+    tip.style.left=Math.min(Math.max(px-65,0),Math.max(b.width-145,0))+'px';
+    tip.style.top='6px';
+  });
+  svg.addEventListener('pointerleave',function(){tip.style.opacity=0;ch.setAttribute('opacity',0);});
+})();
+
+/* --- plan de travail --- */
+var fRt='all', fCrit=false, fProd=false, fQ='';
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+/* surligne les termes cherches dans un texte deja echappe */
+function surli(txt){
+  var t = esc(txt);
+  if(!fQ) return t;
+  fQ.split(/\s+/).filter(Boolean).forEach(function(m){
+    var re = new RegExp('('+m.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');
+    t = t.replace(re,'<mark>$1</mark>');
+  });
+  return t;
+}
+function rtPill(v){return v==='GKE_POD'?'<span class="pill gke">GKE</span>':'<span class="pill cr">Cloud Run</span>';}
+
+/* Les workloads arrivent a plat : on les indexe par image. */
+var cle = function(r){return r.repo+' '+r.img+' '+r.tags;};
+var PAR_IMAGE = {};
+(D.workloads||[]).forEach(function(w){
+  (PAR_IMAGE[cle(w)] = PAR_IMAGE[cle(w)] || []).push(w);
+});
+function wlDe(r){return PAR_IMAGE[cle(r)] || [];}
+D.worklist.forEach(function(r){
+  var ws = wlDe(r);
+  r._n = ws.length;
+  r._prod = ws.some(function(w){return w.prod;});
+  r._projs = ws.reduce(function(a,w){if(a.indexOf(w.proj)<0)a.push(w.proj);return a;},[]);
+  /* index de recherche : tout ce qui identifie l'image et ses deploiements */
+  var mots = [r.img, r.repo, r.tags, r.rt==='GKE_POD'?'gke':'cloud run',
+              r.pkgs||'', r.cves_l||''];
+  ws.forEach(function(w){
+    mots.push(w.proj, w.wl, w.cluster, w.ns, w.tag, w.env);
+    Object.keys(w.labels||{}).forEach(function(k){ mots.push(k, w.labels[k]); });
+  });
+  r._idx = mots.join(' ').toLowerCase();
+});
+
+/* Detail : un bloc par projet, workloads cliquables avec leur tag. */
+function detailHTML(r){
+  var ws = wlDe(r);
+  if(!ws.length) return '<p style="color:var(--muted);font-size:12px;margin:10px 0 0">'
+    + 'Aucun workload trouve dans l\'inventaire runtime pour cette image.</p>';
+  var groupes = {};
+  ws.forEach(function(w){ (groupes[w.proj] = groupes[w.proj] || []).push(w); });
+  /* un projet peut heberger plusieurs environnements : PROD des qu'un
+     seul de ses workloads en est */
+  var estProd = function(g){return g.some(function(w){return w.prod;});};
+  var noms = Object.keys(groupes).sort(function(a,b){
+    var pa = estProd(groupes[a]) ? 0:1, pb = estProd(groupes[b]) ? 0:1;
+    return pa-pb || a.localeCompare(b);
+  });
+  return '<div class="projgrid">' + noms.map(function(p){
+    var g = groupes[p], prod = estProd(g);
+    var meta = g[0].rt==='GKE_POD'
+      ? (g[0].cluster? g[0].cluster + (g[0].ns? ' / '+g[0].ns : '') : g[0].loc)
+      : g[0].loc;
+    return '<div class="projcard'+(prod?' isprod':'')+'">'
+      +'<div class="projhead"><span class="projname">'+surli(p)+'</span>'
+      +(prod?'<span class="prodbadge">PROD</span>':'')+'</div>'
+      +'<div class="projmeta">'+(g[0].rt==='GKE_POD'?'GKE':'Cloud Run')+' · '+esc(meta)+'</div>'
+      +'<div class="wlist">'+g.map(function(w){
+        var labs = w.labels || {}, cles = Object.keys(labs).sort(function(a,b){
+          if(a==='environment') return -1;      /* l'environnement d'abord */
+          if(b==='environment') return 1;
+          return a.localeCompare(b);
+        });
+        var chips = cles.map(function(k){
+          var estEnv = k==='environment';
+          return '<span class="lab'+(estEnv?(' env'+(w.prod?'':' np')):'')+'" title="'+esc(k+' = '+labs[k])+'">'
+            +'<k>'+surli(k.replace('app.kubernetes.io/','k8s/'))+'</k><v>'+surli(labs[k])+'</v></span>';
+        }).join('');
+        return '<div class="witem"><div class="wrow">'
+          +(w.url?'<a href="'+esc(w.url)+'" target="_blank" rel="noopener">'+surli(w.wl)+'</a>'
+                 :'<span class="projname">'+surli(w.wl)+'</span>')
+          +(w.tag?'<span class="wtag">'+surli(w.tag)+'</span>'
+                 :'<span class="wtag none">par digest</span>')
+          +'</div>'
+          +(chips?'<div class="labs">'+chips+'</div>'
+                 :'<div class="nolab">aucun label metier</div>')
+          +'</div>';
+      }).join('')+'</div></div>';
+  }).join('') + '</div>';
+}
+
+function render(){
+  var termes = fQ.split(/\s+/).filter(Boolean);
+  var rows=D.worklist.filter(function(r){
+    if(!(fRt==='all'||r.rt===fRt)) return false;
+    if(fCrit && !(r.c>0)) return false;
+    if(fProd && !r._prod) return false;
+    /* tous les termes doivent matcher : "openssl prod" affine */
+    return termes.every(function(m){return r._idx.indexOf(m)>=0;});
+  });
+
+  if(!rows.length){
+    $('#tb').innerHTML='<tr><td colspan="8"><div class="vide">'
+      +'<b>Aucune image ne correspond</b>'
+      +(fQ?'Rien ne contient « '+esc(fQ)+' »'+((fCrit||fProd||fRt!=='all')?' avec les filtres actifs.':'.')
+          :'Essayez d\'élargir les filtres ou la période.')
+      +'</div></td></tr>';
+    $('#tcount').textContent='0 image';
+    return;
+  }
+
+  $('#tb').innerHTML=rows.map(function(r,i){
+    var np = r._projs.length;
+    return '<tr class="main" data-i="'+i+'" tabindex="0" aria-expanded="false">'
+      +'<td><div class="iname">'+surli(r.img)+'</div><div class="repo">'+surli(r.repo)+'</div>'
+      +'<div class="tagd">'+(r.tags==='NO_TAG_FOUND'||r.tags==='UNTAGGED'?'sans tag':surli(r.tags))+'</div></td>'
+      +'<td>'+rtPill(r.rt)+'</td>'
+      +'<td><span class="tw"><span class="caret" aria-hidden="true"></span>'
+        +r._n+' workload'+(r._n>1?'s':'')+' · '+np+' projet'+(np>1?'s':'')+'</span>'
+        +(r._prod?' <span class="prodbadge">PROD</span>':'')+'</td>'
+      +'<td class="n '+(r.c?'cn':'zero')+'">'+r.c+'</td>'
+      +'<td class="n '+(r.h?'hn':'zero')+'">'+r.h+'</td>'
+      +'<td class="n">'+r.cve+'</td><td class="n">'+r.fix+'</td>'
+      +'<td>'+(r.url?'<a class="ar" href="'+esc(r.url)+'" target="_blank" rel="noopener">ouvrir</a>':'<span class="zero">—</span>')+'</td>'
+      +'</tr>'
+      +'<tr class="detail" data-d="'+i+'" hidden><td colspan="8">'+detailHTML(r)+'</td></tr>';
+  }).join('');
+
+  var basculer=function(tr){
+    var d=$('#tb').querySelector('tr.detail[data-d="'+tr.dataset.i+'"]');
+    if(!d) return;
+    var ouvert = tr.getAttribute('aria-expanded')==='true';
+    tr.setAttribute('aria-expanded', ouvert?'false':'true');
+    d.hidden = ouvert;
+  };
+  Array.prototype.forEach.call($('#tb').querySelectorAll('tr.main'),function(tr){
+    tr.addEventListener('click',function(e){
+      if(e.target.closest('a')) return;   /* laisser passer les liens */
+      basculer(tr);
+    });
+    tr.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.key===' '){e.preventDefault();basculer(tr);}
+    });
+  });
+
+  var c=rows.reduce(function(a,r){return a+r.c;},0),
+      h=rows.reduce(function(a,r){return a+r.h;},0),
+      wtot=rows.reduce(function(a,r){return a+r._n;},0),
+      ptot=rows.reduce(function(a,r){r._projs.forEach(function(p){if(a.indexOf(p)<0)a.push(p);});return a;},[]).length;
+  $('#tcount').textContent=rows.length+' image'+(rows.length>1?'s':'')
+    +(fQ?' correspondant à « '+fQ+' »':'')
+    +' · '+c+' critiques · '+h+' élevées · '+wtot+' workloads dans '
+    +ptot+' projet'+(ptot>1?'s':'')
+    +(rows.length<D.worklist.length?' (sur '+D.worklist.length+')':'');
+}
+/* Recherche : filtrage instantane cote client, sans requete. */
+(function(){
+  var champ = $('#q'), clr = $('#qclear'), t = null;
+  champ.addEventListener('input', function(){
+    clearTimeout(t);
+    t = setTimeout(function(){
+      fQ = champ.value.trim().toLowerCase();
+      clr.hidden = !fQ;
+      render();
+    }, 120);
+  });
+  champ.addEventListener('keydown', function(e){
+    if(e.key==='Escape'){ champ.value=''; fQ=''; clr.hidden=true; render(); }
+  });
+  clr.addEventListener('click', function(){
+    champ.value=''; fQ=''; clr.hidden=true; render(); champ.focus();
+  });
+})();
+
+Array.prototype.forEach.call(document.querySelectorAll('button.f'),function(b){
+  b.addEventListener('click',function(){
+    if(b.dataset.rt){
+      fRt=b.dataset.rt;
+      Array.prototype.forEach.call(document.querySelectorAll('[data-rt]'),function(x){
+        x.setAttribute('aria-pressed', x===b ? 'true':'false');
+      });
+    } else if(b.dataset.only==='prod'){
+      fProd=!fProd; b.setAttribute('aria-pressed', fProd?'true':'false');
+    } else {
+      fCrit=!fCrit; b.setAttribute('aria-pressed', fCrit?'true':'false');
+    }
+    render();
+  });
+});
+render();
+</script>
+</body>
+</html>
