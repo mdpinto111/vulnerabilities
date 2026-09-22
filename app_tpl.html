@@ -138,6 +138,10 @@ mark{background:color-mix(in srgb,var(--high) 26%,transparent);color:inherit;bor
   font-size:13px;color:var(--ink-2);line-height:1.55}
 #pernotice b{font-family:var(--cond);color:var(--ink)}
 #pernotice.rien{border-left-color:var(--muted)}
+#perbadge{display:inline-block;vertical-align:middle;margin-left:8px;font-family:var(--cond);
+  font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 9px;border-radius:2px;background:var(--high-soft);color:var(--high);
+  border:1px solid color-mix(in srgb,var(--high) 30%,transparent)}
 .vide{padding:26px 20px;text-align:center;color:var(--muted);font-size:13px;line-height:1.6}
 .vide b{display:block;font-family:var(--cond);font-size:15px;color:var(--ink);margin-bottom:5px}
 .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
@@ -302,7 +306,7 @@ footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:v
 
 <section>
   <div class="shead">
-    <h2>Plan de travail</h2>
+    <h2>Plan de travail <span id="perbadge" hidden></span></h2>
     <p>Une ligne par image déployée, la plus critique en premier. Chaque ligne est un rebuild à planifier.</p>
   </div>
   <div class="searchrow">
@@ -334,7 +338,8 @@ footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:v
 </section>
 
 <footer>
-  <span>Security Command Center &middot; BigQuery <span class="mono">scc_findings</span> &middot; me-west1</span>
+  <span>Security Command Center &middot; BigQuery <span class="mono">scc_findings</span> &middot; me-west1<br>
+  Seules les sévérités <b>CRITICAL</b> et <b>HIGH</b> sont exportées vers BigQuery&nbsp;: les compteurs d'Artifact Registry, qui incluent Medium et Low, sont plus élevés.</span>
   <span class="mono" id="foot"></span>
 </footer>
 </div>
@@ -388,6 +393,15 @@ $('#refresh').addEventListener('click', function(){ allerVers(PER, true); });
       + esc0(nom) + ' »</b> — soit '+total.toLocaleString('fr-FR')+' findings sur '
       + 'l\'ensemble du parc. Le graphique des découvertes reste sur 30 jours.';
   }
+})();
+
+/* Rappel de la periode au niveau du tableau : les chiffres par image en
+   dependent, et le bandeau du haut est hors de vue quand on y arrive. */
+(function(){
+  if(PER==='all') return;
+  var b = $('#perbadge');
+  b.hidden = false;
+  b.textContent = 'signalé sur ' + (D.meta.periode_nom || PER);
 })();
 
 /* --- verdict --- */
