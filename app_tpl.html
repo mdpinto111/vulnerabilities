@@ -248,6 +248,18 @@ a.ar:hover{border-bottom-color:var(--high)}
   .wlc{max-width:none}
   header h1{font-size:23px}
 }
+/* Google scanner findings, one line per CVE and package */
+.fwrap{margin:4px 0 12px;overflow-x:auto}
+.fsum{font-size:12px;color:var(--ink-2);margin:0 0 6px}
+.fsum b{color:var(--ink)}
+table.ftab{min-width:0;width:100%;border-collapse:collapse;font-size:12px}
+table.ftab th,table.ftab td{display:table-cell!important;padding:4px 8px;border-bottom:1px solid var(--line-2);text-align:left;white-space:nowrap}
+table.ftab th{font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+table.ftab td.fx{color:var(--calm);font-weight:600}
+table.ftab td.nofix{color:var(--muted)}
+table.ftab tr.ret td{opacity:.6}
+.sev{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:600;padding:0 5px;border-radius:2px}
+.sev.c{background:var(--crit-soft);color:var(--crit)} .sev.h{background:var(--high-soft);color:var(--high)}
 footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:11.5px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 </style>
 </head>
@@ -765,6 +777,35 @@ function detailHTML(r){
   }).join('') + '</div>';
 }
 
+/* Every Critical/High finding as the Google scanner rates it. This is the
+   list a fix must clear: Trivy can rate the same CVE lower. */
+function findingsHTML(r){
+  var fs = r.findings || [];
+  if(!fs.length) return '';
+  var os = fs.filter(function(f){return f.ptype==='OS' && f.fixv;}).length;
+  var lib = fs.filter(function(f){return f.ptype!=='OS' && f.fixv;}).length;
+  var none = fs.filter(function(f){return !f.fixv;}).length;
+  var sum = '<p class="fsum"><b>' + fs.length + ' finding' + (fs.length>1?'s':'')
+    + ' Google</b> (Critical/High, notation GCP)'
+    + (os ? ' · <b>' + os + '</b> paquet' + (os>1?'s':'') + ' OS corrigé' + (os>1?'s':'') + ' en amont (<span class="mono">apk upgrade</span> / rebuild)' : '')
+    + (lib ? ' · <b>' + lib + '</b> dépendance' + (lib>1?'s':'') + ' applicative' + (lib>1?'s':'') + ' à monter' : '')
+    + (none ? ' · <b>' + none + '</b> sans correctif' : '') + '</p>';
+  var rows = fs.map(function(f){
+    var s = f.sev==='CRITICAL' ? 'c' : 'h';
+    return '<tr' + (f.retire ? ' class="ret" title="INACTIVE dans SCC, toujours affiché par Artifact Registry"' : '') + '>'
+      + '<td><span class="sev ' + s + '">' + (s==='c'?'CRIT':'HIGH') + '</span></td>'
+      + '<td class="mono">' + (f.cvss!=null ? f.cvss.toFixed(1) : '—') + '</td>'
+      + '<td class="mono">' + surli(f.cve) + '</td>'
+      + '<td>' + surli(f.pkg) + ' <span class="sup">' + esc((f.ptype||'').toLowerCase()) + '</span></td>'
+      + '<td class="mono">' + esc(f.inst) + '</td>'
+      + (f.fixv ? '<td class="mono fx">' + esc(f.fixv) + '</td>' : '<td class="nofix">aucun</td>')
+      + '</tr>';
+  }).join('');
+  return '<div class="fwrap">' + sum + '<table class="ftab"><thead><tr>'
+    + '<th>Gravité</th><th>CVSS</th><th>CVE</th><th>Paquet</th><th>Installé</th><th>Corrigé en</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
 /* Une version publiee apres celle en service, et que SCC trouve moins
    vulnerable. Seules des images executables reellement analysees entrent ici :
    un index ou une attestation afficherait un faux progres. */
@@ -834,7 +875,7 @@ function render(){
       +'<td class="n">'+r.cve+'</td><td class="n">'+r.fix+'</td>'
       +'<td>'+(r.url?'<a class="ar" href="'+esc(r.url)+'" target="_blank" rel="noopener">ouvrir</a>':'<span class="zero">—</span>')+'</td>'
       +'</tr>'
-      +'<tr class="detail" data-d="'+i+'" hidden><td colspan="8">'+detailHTML(r)+'</td></tr>';
+      +'<tr class="detail" data-d="'+i+'" hidden><td colspan="8">'+findingsHTML(r)+detailHTML(r)+'</td></tr>';
   }).join('');
 
   var basculer=function(tr){

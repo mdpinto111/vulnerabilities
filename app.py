@@ -81,7 +81,10 @@ VUE = f"""(
       ) AS artifact_registry_url,
       finding.vulnerability.cve.id AS cve_id,
       finding.vulnerability.offending_package.package_name AS package_name,
+      finding.vulnerability.offending_package.package_type AS package_type,
+      finding.vulnerability.offending_package.package_version AS installed_version,
       finding.vulnerability.fixed_package.package_version AS fixed_version,
+      finding.vulnerability.cve.cvssv3.base_score AS cvss,
       ROW_NUMBER() OVER (
         PARTITION BY resource.name,
           finding.vulnerability.cve.id,
@@ -379,6 +382,23 @@ REQUETES_BASE = {
 # Requetes : phase 2 (restreintes aux digests reellement en execution)
 # --------------------------------------------------------------------------
 
+SQL_FINDINGS = f"""
+        SELECT REGEXP_EXTRACT(image_digest, r"(sha256:[a-f0-9]{{64}})") AS dig,
+          cve_id AS cve, severity AS sev, cvss,
+          package_name AS pkg, package_type AS ptype,
+          installed_version AS inst, fixed_version AS fixv,
+          retire,
+          FORMAT_TIMESTAMP("%Y-%m-%d %H:%M", event_time, "Asia/Jerusalem") AS vu
+        FROM {VUE}"""
+
+# Findings of ONE digest, for an image that does not serve traffic yet (a tag
+# just pushed). Targeted read of the export, never a sweep of the fleet.
+REQ_FINDINGS_DIGEST = f"""
+    {SQL_FINDINGS}
+    WHERE REGEXP_EXTRACT(image_digest, r"(sha256:[a-f0-9]{{64}})") = "__DIGEST__"
+    ORDER BY sev, cve
+"""
+
 REQUETES_VULN = {
     "matrice": f"""
         SELECT severity AS sev,
@@ -422,9 +442,9 @@ REQUETES_VULN = {
           COUNT(DISTINCT cve_id) AS cve,
           ANY_VALUE(artifact_registry_url) AS url,
           -- alimentent la recherche : on cherche aussi par paquet et par CVE
-          STRING_AGG(DISTINCT package_name, " "
-                     ORDER BY package_name LIMIT 60) AS pkgs,
-          STRING_AGG(DISTINCT cve_id, " " ORDER BY cve_id LIMIT 80) AS cves_l
+          -- no LIMIT: a truncated list hides findings from the search
+          STRING_AGG(DISTINCT package_name, " " ORDER BY package_name) AS pkgs,
+          STRING_AGG(DISTINCT cve_id, " " ORDER BY cve_id) AS cves_l
         FROM {VUE}
         WHERE {MARQUEUR_DEP} __PERIODE__
         GROUP BY repo, img, tags, dig
@@ -440,6 +460,15 @@ REQUETES_VULN = {
         FROM {VUE}
         WHERE {MARQUEUR_DEP} AND retire
         GROUP BY dig
+    """,
+    # One row per Critical/High finding, exactly as the Google scanner rates
+    # it. Trivy takes the distribution's severity and can rate the same CVE
+    # lower (zlib CVE-2026-85091: MEDIUM in Trivy, HIGH 7.4 in SCC), so this
+    # list, not a Trivy scan, is what a fix must clear.
+    "findings": f"""
+        {SQL_FINDINGS}
+        WHERE {MARQUEUR_DEP} __PERIODE__
+        ORDER BY dig, sev, cve
     """,
 }
 
@@ -457,6 +486,37 @@ REQ_COUVERTS = f"""
 
 ENTIERS = {"nb", "fix", "img", "cve", "c", "h", "crit", "wl",
            "images_totales", "lignes_brutes"}
+
+
+def normalize_findings(rows):
+    """bq --format=json returns every scalar as a string."""
+    out = []
+    for r in rows:
+        try:
+            cvss = float(r.get("cvss")) if r.get("cvss") not in (None, "") else None
+        except (TypeError, ValueError):
+            cvss = None
+        out.append({
+            "dig": r.get("dig") or "",
+            "cve": r.get("cve") or "",
+            "sev": r.get("sev") or "",
+            "cvss": cvss,
+            "pkg": r.get("pkg") or "",
+            "ptype": r.get("ptype") or "",
+            "inst": r.get("inst") or "",
+            "fixv": r.get("fixv") or "",
+            "retire": str(r.get("retire")).lower() == "true",
+            "vu": r.get("vu") or "",
+        })
+    return out
+
+
+def findings_by_digest(rows):
+    par = {}
+    for f in normalize_findings(rows):
+        par.setdefault(f["dig"], []).append(
+            {k: v for k, v in f.items() if k != "dig"})
+    return par
 
 
 # --------------------------------------------------------------------------
@@ -1554,6 +1614,7 @@ def construire_donnees(periode=PERIODE_DEFAUT):
     # On ne renvoie au navigateur que les emplacements d'une image vulnerable.
     vulnerables = {l["dig"] for l in resultats["worklist"] if l.get("dig")}
     retires = {l["dig"]: l["nb"] for l in resultats["retires"] if l.get("dig")}
+    details = findings_by_digest(resultats["findings"])
     workloads = [d for d in deploiements if d.get("dig") in vulnerables]
 
     par_dig = {}
@@ -1660,6 +1721,7 @@ def construire_donnees(periode=PERIODE_DEFAUT):
             "nom": chemin,
             "live": any(w["src"] == "live" for w in ws),
             "ret": retires.get(dig, 0),
+            "findings": details.get(dig, []),
             **dict(zip(("depot", "dev"),
                        decrire_provenance(
                            dig, chemin, prov.get(dig),
@@ -1961,6 +2023,88 @@ class Handler(http.server.BaseHTTPRequestHandler):
             "rows": rows,
         }, ensure_ascii=False), 200, jtype)
 
+    def _send_findings(self, params, periode):
+        """GET /api/findings?image=<name>|digest=<sha256:...>&format=json|csv
+
+        Every Critical/High finding of the Google scanner (SCC export), one row
+        per (digest, CVE, package). Served from the last collection only; it
+        never starts one.
+
+        live=1 with a digest that is not in the collection (a tag just pushed,
+        not serving yet) runs ONE BigQuery query restricted to that digest.
+        """
+        jtype = "application/json; charset=utf-8"
+        image = params.get("image", [""])[0].strip()
+        digest = params.get("digest", [""])[0].strip().lower()
+        live = params.get("live", ["0"])[0] == "1"
+        fmt = params.get("format", ["json"])[0].lower()
+        if not image and not digest:
+            self._envoyer(json.dumps({"error": "pass image= or digest="}),
+                          400, jtype)
+            return
+        if digest and not RE_DIGEST.match(digest):
+            self._envoyer(json.dumps({"error": "digest must be sha256:<64 hex>"}),
+                          400, jtype)
+            return
+
+        donnees, ts = cached_data(periode)
+        rows, source = [], "cache"
+        for r in (donnees or {}).get("worklist") or []:
+            name = (r.get("img") or "").rsplit("/", 1)[-1]
+            if digest and r.get("dig") != digest:
+                continue
+            if image and image.lower() != name.lower():
+                continue
+            for f in r.get("findings") or []:
+                rows.append({"image": name, "version": r.get("ver") or "",
+                             "digest": r.get("dig") or "", **f})
+        found = bool(rows) or any(
+            r.get("dig") == digest for r in (donnees or {}).get("worklist") or [])
+
+        if digest and not found:
+            if not live:
+                self._envoyer(json.dumps({
+                    "error": "digest not in the last collection (not serving, "
+                             "or clean); add live=1 to read it from the SCC "
+                             "export"}), 404, jtype)
+                return
+            try:
+                brut = lancer_bq(REQ_FINDINGS_DIGEST.replace("__DIGEST__", digest))
+            except ErreurBQ as exc:
+                self._envoyer(json.dumps({"error": str(exc)}), 500, jtype)
+                return
+            rows = [{"image": image, "version": "", "digest": digest,
+                     **{k: v for k, v in f.items() if k != "dig"}}
+                    for f in normalize_findings(brut)]
+            source, ts = "live", time.time()
+        elif donnees is None:
+            self._envoyer(json.dumps({
+                "error": "no cached data; open the UI once"}), 503, jtype)
+            return
+
+        cols = ["image", "version", "digest", "cve", "sev", "cvss", "pkg",
+                "ptype", "inst", "fixv", "retire", "vu"]
+        if fmt == "csv":
+            import csv
+            import io
+            buf = io.StringIO()
+            w = csv.DictWriter(buf, fieldnames=cols, lineterminator="\r\n")
+            w.writeheader()
+            w.writerows(rows)
+            self._envoyer("﻿" + buf.getvalue(), 200,
+                          "text/csv; charset=utf-8")
+            return
+        self._envoyer(json.dumps({
+            "source": source,
+            "age_seconds": round(time.time() - ts) if ts else None,
+            # SCC exports only Critical and High: an empty list means "none
+            # reported", which is also what a digest not analysed yet returns.
+            "note": "Critical/High only; empty = none reported or not analysed yet",
+            "columns": cols,
+            "count": len(rows),
+            "rows": rows,
+        }, ensure_ascii=False), 200, jtype)
+
     def do_GET(self):
         url = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(url.query)
@@ -1986,6 +2130,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         if chemin == "/api/table":
             self._send_table(params, forcer, periode)
+            return
+
+        if chemin == "/api/findings":
+            self._send_findings(params, periode)
             return
 
         if chemin != "/":
