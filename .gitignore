@@ -5,6 +5,8 @@
 dashboard.html
 dashboard_data.json
 deployed_worklist.json
+scans/
+mails_cloudrun_*
 
 # Sorties de travail
 _*.json
@@ -17,6 +19,13 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# Outillage d'agent - ne doit jamais partir dans le depot.
+CLAUDE.md
+.claude/
+.cursor/
+.aider*
+.github/copilot*
 
 # Éditeurs / OS
 .vscode/

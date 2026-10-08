@@ -133,11 +133,19 @@ button.clr{font-family:var(--sans);font-size:12px;padding:8px 12px;border-radius
 button.clr:hover{border-color:var(--ink-2)}
 mark{background:color-mix(in srgb,var(--high) 26%,transparent);color:inherit;border-radius:2px;padding:0 1px}
 /* bandeau de periode active */
-#pernotice{margin-top:20px;padding:13px 17px;border:1px solid var(--line);
+#pernotice,#srcnotice{margin-top:20px;padding:13px 17px;border:1px solid var(--line);
   border-left:3px solid var(--high);border-radius:4px;background:var(--surface);
   font-size:13px;color:var(--ink-2);line-height:1.55}
-#pernotice b{font-family:var(--cond);color:var(--ink)}
+#pernotice b,#srcnotice b{font-family:var(--cond);color:var(--ink)}
 #pernotice.rien{border-left-color:var(--muted)}
+#srcnotice{border-left-color:var(--muted)}
+#srcnotice.alerte{border-left-color:var(--crit)}
+#srcnotice .mono{font-size:12px}
+.prov{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.5}
+.prov b{font-weight:600;color:var(--ink)}
+.prov .sup{font-style:italic}
+.prov .inc{font-style:italic;opacity:.8}
+.prov a{word-break:break-all}
 #perbadge{display:inline-block;vertical-align:middle;margin-left:8px;font-family:var(--cond);
   font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
   padding:3px 9px;border-radius:2px;background:var(--high-soft);color:var(--high);
@@ -188,6 +196,29 @@ tr.detail>td{background:var(--surface-2);padding:0 12px 14px;border-bottom:1px s
 .wrow a:hover{border-bottom-color:var(--high)}
 .wtag{font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:2px;background:var(--high-soft);color:var(--high);white-space:nowrap}
 .wtag.none{background:transparent;color:var(--muted);opacity:.6;padding-left:0}
+/* reference d'image reellement en execution */
+.imgref{font-family:var(--mono);font-size:10.5px;color:var(--ink-2);word-break:break-all;line-height:1.5;margin-top:2px}
+.imgref .dg{color:var(--muted)}
+.wfoot{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:2px}
+.wcfg{font-family:var(--cond);font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--high);text-decoration:none;white-space:nowrap;border-bottom:1px solid color-mix(in srgb,var(--high) 30%,transparent)}
+.wcfg:hover{border-bottom-color:var(--high)}
+.wsrc{font-family:var(--cond);font-size:9.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:1px 5px;border-radius:2px;background:var(--line-2);color:var(--muted);white-space:nowrap}
+.wsrc.live{background:var(--high-soft);color:var(--high)}
+.vtag{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:600;padding:1px 6px;border-radius:2px;background:var(--crit-soft);color:var(--crit);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+.vtag.none{background:transparent;color:var(--muted);font-weight:400;padding-left:0}
+.drift{display:inline-block;font-family:var(--mono);font-size:10px;padding:1px 6px;border-radius:2px;
+  border:1px solid color-mix(in srgb,var(--crit) 45%,var(--line));background:var(--crit-soft);
+  color:var(--crit);white-space:nowrap;margin-left:5px}
+.drift b{font-weight:600}
+.gabarit{font-family:var(--mono);font-size:10px;color:var(--muted);line-height:1.5;margin-top:3px;word-break:break-all}
+.gabarit .gk{text-transform:uppercase;letter-spacing:.05em;font-family:var(--cond);font-weight:600}
+.gabarit .gv{color:var(--ink-2)}
+.gabarit b{color:var(--crit);font-weight:600}
+.gain{display:inline-block;font-family:var(--mono);font-size:10px;padding:1px 6px;border-radius:2px;
+  border:1px solid color-mix(in srgb,var(--calm) 45%,var(--line));
+  background:color-mix(in srgb,var(--calm) 12%,transparent);color:var(--calm);
+  white-space:nowrap;margin-left:5px}
+.gain b{font-weight:600}
 /* labels du workload */
 .labs{display:flex;flex-wrap:wrap;gap:4px}
 .lab{display:inline-flex;align-items:baseline;gap:4px;font-family:var(--mono);font-size:10px;
@@ -202,6 +233,21 @@ tr.detail>td{background:var(--surface-2);padding:0 12px 14px;border-bottom:1px s
 .nolab{font-size:10.5px;color:var(--muted);opacity:.7;font-style:italic}
 a.ar{color:var(--high);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--high) 35%,transparent)}
 a.ar:hover{border-bottom-color:var(--high)}
+/* lecture sur telephone : le tableau ne tient pas en 390 px. On masque les
+   colonnes que le detail deplie redonne de toute facon, plutot que d'imposer
+   un defilement horizontal. */
+@media(max-width:680px){
+  .wrap{padding-left:14px;padding-right:14px}
+  table{min-width:0;font-size:12.5px}
+  td,th{padding:8px 9px}
+  th:nth-child(6),td:nth-child(6),
+  th:nth-child(7),td:nth-child(7),
+  th:nth-child(8),td:nth-child(8){display:none}
+  .vnum{font-size:44px}
+  .projgrid{grid-template-columns:1fr}
+  .wlc{max-width:none}
+  header h1{font-size:23px}
+}
 footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:11.5px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 </style>
 </head>
@@ -237,6 +283,7 @@ footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:v
 </header>
 
 <div id="pernotice" hidden></div>
+<div id="srcnotice" hidden></div>
 
 <div class="verdict">
   <div class="vcard act">
@@ -323,12 +370,13 @@ footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:v
     <label style="margin-left:10px">Filtre</label>
     <button class="f" data-only="crit" aria-pressed="false">Critiques seulement</button>
     <button class="f" data-only="prod" aria-pressed="false">Production seulement</button>
+    <button class="f" data-only="maj" aria-pressed="false" id="fmaj" hidden>Version plus saine disponible</button>
   </div>
   <p style="color:var(--muted);font-size:12px;margin:-4px 0 10px">Cliquez une ligne pour voir où l'image tourne&nbsp;: projets, workloads, labels et liens console.</p>
   <div class="tscroll">
     <table>
       <thead><tr>
-        <th>Image</th><th>Runtime</th><th>Déploiements</th>
+        <th>Image en exécution &amp; version</th><th>Runtime</th><th>Déploiements</th>
         <th class="n">Crit.</th><th class="n">Élev.</th><th class="n">CVE</th><th class="n">Corrigeables</th><th>Registry</th>
       </tr></thead>
       <tbody id="tb"></tbody>
@@ -402,6 +450,48 @@ $('#refresh').addEventListener('click', function(){ allerVers(PER, true); });
   var b = $('#perbadge');
   b.hidden = false;
   b.textContent = 'signalé sur ' + (D.meta.periode_nom || PER);
+})();
+
+/* --- d'ou viennent les chiffres : chaque source n'a pas la meme fraicheur --- */
+(function(){
+  var n = $('#srcnotice'), m = D.meta, err = m.cr_erreurs || [];
+  var nc = m.non_couverts || [],
+      ncOut = nc.filter(function(r){return !r.exporte;}),
+      ncIn = nc.filter(function(r){return r.exporte;}),
+      sumImg = function(l){return l.reduce(function(a,r){return a+r.img;},0);},
+      regs = function(l){return l.map(function(r){
+        return '<span class="mono" title="' + esc0(r.ex.join(', ')) + '">'
+          + esc0(r.reg) + '</span>&nbsp;(' + r.img + ')';}).join(', ');};
+  n.hidden = false;
+  if(err.length) n.className = 'alerte';
+  n.innerHTML = '<b>Périmètre vérifié en direct.</b> Les '
+    + m.cr_services + ' services Cloud Run de ' + m.cr_projets + ' projets ont '
+    + 'été relus sur l\'API Cloud Run : chaque ligne porte la révision qui sert '
+    + 'le trafic et l\'image exacte qu\'elle exécute. Les révisions retirées — '
+    + 'la grande majorité de l\'inventaire — sont exclues.<br>'
+    + 'Le volet <b>GKE</b> repose encore sur l\'export Cloud Asset Inventory, '
+    + 'arrêté au <span class="mono">' + esc0(m.cai_date) + '</span>&nbsp;: un pod '
+    + 'redéployé depuis n\'y figure pas.'
+    + (m.cr_disparus ? ' <b>' + m.cr_disparus + ' service' + (m.cr_disparus>1?'s':'')
+        + "</b> que l'inventaire liste encore n'existe" + (m.cr_disparus>1?"nt":"")
+        + ' plus dans Cloud Run&nbsp;: leurs images ne sont plus comptées.' : '')
+    + (err.length ? '<br><b>Cloud Run illisible sur ' + err.length + ' projet'
+        + (err.length>1?'s':'') + '</b> — repli sur l\'inventaire pour '
+        + err.map(function(e){return esc0(e.proj);}).join(', ') : '')
+    + (m.retires ? '<br><b>' + nf(m.retires) + ' Critical/High comptées bien que SCC les '
+        + 'marque INACTIVE</b>, sur ' + m.img_retires + ' image' + (m.img_retires>1?'s':'')
+        + ' en service' + (m.img_retires_seuls ? ' (dont ' + m.img_retires_seuls
+            + ' que SCC ne signale plus du tout)' : '')
+        + '. La console Artifact Registry en affiche toujours la quasi-totalité&nbsp;: c\'est elle que '
+        + 'ce tableau suit, au prix d\'une légère surestimation possible des High (contrôle du 06/10&nbsp;: '
+        + 'Critical exacts, 5 High sur 118 en trop sur une image). Badge <span class="vtag none">hors SCC</span> sur les lignes concernées.' : '')
+    + (ncOut.length ? '<br><b>' + nf(sumImg(ncOut)) + ' image' + (sumImg(ncOut)>1?'s':'')
+        + ' en service hors du périmètre SCC exporté</b>&nbsp;: leur registre n\'alimente '
+        + 'pas la table des findings, on ne sait rien de leurs failles. '
+        + regs(ncOut) + '.' : '')
+    + (ncIn.length ? '<br>' + nf(sumImg(ncIn)) + ' image' + (sumImg(ncIn)>1?'s':'')
+        + ' en service dans un registre exporté sans aucune faille remontée '
+        + '(image saine, ou jamais analysée)&nbsp;: ' + regs(ncIn) + '.' : '');
 })();
 
 /* --- verdict --- */
@@ -509,7 +599,7 @@ drawBars($('#cvebars'), cv, Math.max.apply(null,cv.map(function(c){return c.c;})
 })();
 
 /* --- plan de travail --- */
-var fRt='all', fCrit=false, fProd=false, fQ='';
+var fRt='all', fCrit=false, fProd=false, fMaj=false, fQ='';
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 /* surligne les termes cherches dans un texte deja echappe */
 function surli(txt){
@@ -521,31 +611,96 @@ function surli(txt){
   });
   return t;
 }
-function rtPill(v){return v==='GKE_POD'?'<span class="pill gke">GKE</span>':'<span class="pill cr">Cloud Run</span>';}
+function rtPill(v){
+  if(v==='GKE_POD') return '<span class="pill gke">GKE</span>';
+  if(v==='MIXTE') return '<span class="pill cr">Cloud Run</span> <span class="pill gke">GKE</span>';
+  return '<span class="pill cr">Cloud Run</span>';
+}
 
-/* Les workloads arrivent a plat : on les indexe par image. */
-var cle = function(r){return r.repo+' '+r.img+' '+r.tags;};
+/* Les workloads arrivent a plat : on les indexe par digest, car c'est le
+   digest qui tourne — deux versions d'une meme image peuvent coexister. */
 var PAR_IMAGE = {};
 (D.workloads||[]).forEach(function(w){
-  (PAR_IMAGE[cle(w)] = PAR_IMAGE[cle(w)] || []).push(w);
+  (PAR_IMAGE[w.dig] = PAR_IMAGE[w.dig] || []).push(w);
 });
-function wlDe(r){return PAR_IMAGE[cle(r)] || [];}
+function wlDe(r){return PAR_IMAGE[r.dig] || [];}
+function digCourt(d){return d ? d.slice(0,19) + '…' : '';}
+/* Reference exacte de ce qui tourne : nom complet, version, digest.
+   Deux versions peuvent differer : celle que le deploiement demande, et le
+   tag qu'Artifact Registry porte aujourd'hui sur ce digest — un rebuild
+   publie sous le meme numero deplace le tag sans toucher au conteneur. */
+function refHTML(w){
+  var ver = w.ver || '';
+  var titre = (w.ar && w.ar.length)
+    ? "version sous laquelle Artifact Registry publie ce digest aujourd'hui"
+    : "tag demandé par le déploiement, non confirmé par le registre";
+  return '<div class="imgref">' + surli(w.nom || w.img || '')
+    + (ver ? '<b class="vtag" style="margin-left:5px" title="' + esc(titre) + '">:'
+             + surli(ver) + '</b>' : '')
+    + driftHTML(w)
+    + '<br><span class="dg">' + surli(digCourt(w.dig)) + '</span></div>';
+}
+/* Deux écarts distincts, à ne pas confondre :
+   - retard : une révision plus récente existe et ne reçoit aucun trafic.
+     Le correctif est publié mais pas en service. C'est le cas actionnable.
+   - derive : le gabarit réclame un tag que le registre n'associe plus à ce
+     conteneur, sans qu'une révision plus récente soit en cause. */
+function driftHTML(w){
+  if(w.retard){
+    var t = "Le trafic est servi à 100 % par une révision antérieure. La "
+      + "révision " + w.recente + (w.recente_ver ? " (:" + w.recente_ver + ")" : "")
+      + " est déployée mais ne reçoit rien : la console affiche son image, "
+      + "alors que le conteneur en service est un autre.";
+    return '<span class="drift" title="' + esc(t) + '">révision <b>'
+      + surli(w.recente_ver ? ':' + w.recente_ver : w.recente)
+      + '</b> prête, sans trafic</span>';
+  }
+  if(w.derive){
+    var d = "Le gabarit du service demande :" + w.reclamee + ", mais le registre "
+      + "n'associe plus ce tag à ce conteneur.";
+    return '<span class="drift" title="' + esc(d) + '">gabarit <b>:'
+      + surli(w.reclamee) + '</b>, non confirmé</span>';
+  }
+  return '';
+}
 D.worklist.forEach(function(r){
   var ws = wlDe(r);
   r._n = ws.length;
   r._prod = ws.some(function(w){return w.prod;});
   r._projs = ws.reduce(function(a,w){if(a.indexOf(w.proj)<0)a.push(w.proj);return a;},[]);
-  /* index de recherche : tout ce qui identifie l'image et ses deploiements */
-  var mots = [r.img, r.repo, r.tags, r.rt==='GKE_POD'?'gke':'cloud run',
+  /* index de recherche : tout ce qui identifie l'image, sa version et ses
+     deploiements — on cherche donc aussi par version et par revision */
+  var mots = [r.img, r.repo, r.tags, r.ver, r.reclamee, r.recente, r.recente_ver, r.nom, r.dig,
+               (r.depot||{}).url, (r.dev||{}).nom,
+              r.mieux ? 'maj ' + (r.mieux.ver || '') : '',
+              (r.ar||[]).join(' '), r.rt==='GKE_POD'?'gke':'cloud run',
               r.pkgs||'', r.cves_l||''];
   ws.forEach(function(w){
-    mots.push(w.proj, w.wl, w.cluster, w.ns, w.tag, w.env);
+    mots.push(w.proj, w.wl, w.cluster, w.ns, w.ver, w.reclamee, w.rev, w.env, w.ref);
     Object.keys(w.labels||{}).forEach(function(k){ mots.push(k, w.labels[k]); });
   });
   r._idx = mots.join(' ').toLowerCase();
 });
 
 /* Detail : un bloc par projet, workloads cliquables avec leur tag. */
+/* Depot de code et responsable, chacun avec son niveau de certitude :
+   sur (rien), suppose (mention entre parentheses), inconnu (dit tel quel). */
+function provHTML(r){
+  var dp = r.depot || {etat:'inconnu'}, dv = r.dev || {etat:'inconnu'};
+  /* pas de depot trouve : on n'ecrit rien plutot qu'un lien invente */
+  var depot = dp.etat === 'inconnu' ? ''
+    : '<b>Code&nbsp;:</b> <a href="' + esc(dp.url) + '" target="_blank" rel="noopener" title="' + esc(dp.source) + '">'
+        + surli(dp.url) + '</a>'
+      + (dp.etat === 'suppose' ? ' <span class="sup" title="' + esc(dp.source) + '">(supposé)</span>' : '')
+      + (dp.commit ? ' <span class="mono" title="commit">@' + esc(dp.commit.slice(0, 10)) + '</span>' : '')
+      + '<br>';
+  var dev = dv.etat === 'inconnu'
+    ? '<span class="inc">responsable inconnu</span>'
+    : '<span title="' + esc(dv.source) + '">' + surli(dv.nom) + '</span>'
+      + (dv.etat === 'suppose' ? ' <span class="sup" title="' + esc(dv.source) + '">(supposé)</span>' : '');
+  return '<div class="prov">' + depot + '<b>Dev&nbsp;:</b> ' + dev + '</div>';
+}
+
 function detailHTML(r){
   var ws = wlDe(r);
   if(!ws.length) return '<p style="color:var(--muted);font-size:12px;margin:10px 0 0">'
@@ -579,11 +734,29 @@ function detailHTML(r){
           return '<span class="lab'+(estEnv?(' env'+(w.prod?'':' np')):'')+'" title="'+esc(k+' = '+labs[k])+'">'
             +'<k>'+surli(k.replace('app.kubernetes.io/','k8s/'))+'</k><v>'+surli(labs[k])+'</v></span>';
         }).join('');
+        var estCR = w.rt !== 'GKE_POD';
         return '<div class="witem"><div class="wrow">'
           +(w.url?'<a href="'+esc(w.url)+'" target="_blank" rel="noopener">'+surli(w.wl)+'</a>'
                  :'<span class="projname">'+surli(w.wl)+'</span>')
-          +(w.tag?'<span class="wtag">'+surli(w.tag)+'</span>'
-                 :'<span class="wtag none">par digest</span>')
+          +'<span class="wsrc'+(w.src==='live'?' live':'')+'" title="'
+          +(w.src==='live'?"lu en direct sur l'API Cloud Run"
+                          :'inventaire Cloud Asset du '+esc(w.date||'?'))+'">'
+          +(w.src==='live'?'en direct':'inventaire')+'</span>'
+          +(w.part!=null && w.part<100 && w.part>0
+              ?'<span class="wtag">'+w.part+' % du trafic</span>':'')
+          +'</div>'
+          /* ce que le workload execute vraiment : nom complet + version + digest */
+          +refHTML(w)
+          /* et, quand il differe, ce que la console Cloud Run affiche :
+             l'image du gabarit, qui ne sert qu'a fabriquer la prochaine
+             revision et ne tourne donc pas forcement */
+          +gabaritHTML(w)
+          +'<div class="wfoot">'
+          +(w.rev?'<span class="wtag">'+(estCR?'révision ':'pod ')+surli(w.rev)+'</span>':'')
+          +(w.cfg?'<a class="wcfg" href="'+esc(w.cfg)+'" target="_blank" rel="noopener">'
+                  +(estCR?'config Cloud Run':'YAML du pod')+' &#8599;</a>':'')
+          +(w.registre?'<a class="wcfg" href="'+esc(w.registre)+'" target="_blank" rel="noopener">'
+                  +'image dans le registre &#8599;</a>':'')
           +'</div>'
           +(chips?'<div class="labs">'+chips+'</div>'
                  :'<div class="nolab">aucun label metier</div>')
@@ -592,12 +765,38 @@ function detailHTML(r){
   }).join('') + '</div>';
 }
 
+/* Une version publiee apres celle en service, et que SCC trouve moins
+   vulnerable. Seules des images executables reellement analysees entrent ici :
+   un index ou une attestation afficherait un faux progres. */
+function gainHTML(r){
+  var m = r.mieux;
+  if(!m) return '';
+  var nom = m.ver ? ':' + m.ver : m.dig.slice(7, 19);
+  var t = "Publiée le " + m.cree + ", cette version porte " + m.c + " critique"
+    + (m.c > 1 ? "s" : "") + " et " + m.h + " élevée" + (m.h > 1 ? "s" : "")
+    + ", contre " + r.c + " et " + r.h + " pour celle en service.";
+  return '<span class="gain" title="' + esc(t) + '">' + surli(nom)
+    + ' dispo&nbsp;: <b>' + m.c + 'C / ' + m.h + 'H</b></span>';
+}
+
+/* Cloud Run distingue le gabarit du service (« Container image URL » dans la
+   console) des revisions, figees sur un digest des leur creation. Les deux
+   divergent des qu'une revision anterieure garde le trafic. */
+function gabaritHTML(w){
+  if(!w.retard || !w.reclamee) return '';
+  return '<div class="gabarit">'
+    + '<span class="gk">gabarit du service</span> <span class="gv">:'
+    + surli(w.reclamee) + '</span> &rarr; révision ' + surli(w.recente)
+    + ', <b>0&nbsp;% du trafic</b></div>';
+}
+
 function render(){
   var termes = fQ.split(/\s+/).filter(Boolean);
   var rows=D.worklist.filter(function(r){
-    if(!(fRt==='all'||r.rt===fRt)) return false;
+    if(!(fRt==='all'||r.rt===fRt||r.rt==='MIXTE')) return false;
     if(fCrit && !(r.c>0)) return false;
     if(fProd && !r._prod) return false;
+    if(fMaj && !r.mieux) return false;
     /* tous les termes doivent matcher : "openssl prod" affine */
     return termes.every(function(m){return r._idx.indexOf(m)>=0;});
   });
@@ -605,7 +804,7 @@ function render(){
   if(!rows.length){
     $('#tb').innerHTML='<tr><td colspan="8"><div class="vide">'
       +'<b>Aucune image ne correspond</b>'
-      +(fQ?'Rien ne contient « '+esc(fQ)+' »'+((fCrit||fProd||fRt!=='all')?' avec les filtres actifs.':'.')
+      +(fQ?'Rien ne contient « '+esc(fQ)+' »'+((fCrit||fProd||fMaj||fRt!=='all')?' avec les filtres actifs.':'.')
           :'Essayez d\'élargir les filtres ou la période.')
       +'</div></td></tr>';
     $('#tcount').textContent='0 image';
@@ -615,8 +814,17 @@ function render(){
   $('#tb').innerHTML=rows.map(function(r,i){
     var np = r._projs.length;
     return '<tr class="main" data-i="'+i+'" tabindex="0" aria-expanded="false">'
-      +'<td><div class="iname">'+surli(r.img)+'</div><div class="repo">'+surli(r.repo)+'</div>'
-      +'<div class="tagd">'+(r.tags==='NO_TAG_FOUND'||r.tags==='UNTAGGED'?'sans tag':surli(r.tags))+'</div></td>'
+      +'<td><div class="iname">'+surli(r.img)
+        +(r.ver?' <b class="vtag">:'+surli(r.ver)+'</b>'
+               :' <span class="vtag none">version non étiquetée</span>')
+        +driftHTML(r)+gainHTML(r)
+        +(r.ret?' <span class="vtag none" title="'+r.ret+' des Critical/High de cette image sont '
+          +'marquees INACTIVE dans SCC mais toujours affichees par Artifact Registry.">'
+          +(r.ret===r.c+r.h?'hors SCC':r.ret+' hors SCC')+'</span>':'')
+        +'</div>'
+      +'<div class="repo">'+surli(r.repo)+'</div>'
+      +provHTML(r)
+      +'<div class="tagd">'+surli(digCourt(r.dig))+'</div></td>'
       +'<td>'+rtPill(r.rt)+'</td>'
       +'<td><span class="tw"><span class="caret" aria-hidden="true"></span>'
         +r._n+' workload'+(r._n>1?'s':'')+' · '+np+' projet'+(np>1?'s':'')+'</span>'
@@ -684,12 +892,19 @@ Array.prototype.forEach.call(document.querySelectorAll('button.f'),function(b){
       });
     } else if(b.dataset.only==='prod'){
       fProd=!fProd; b.setAttribute('aria-pressed', fProd?'true':'false');
+    } else if(b.dataset.only==='maj'){
+      fMaj=!fMaj; b.setAttribute('aria-pressed', fMaj?'true':'false');
     } else {
       fCrit=!fCrit; b.setAttribute('aria-pressed', fCrit?'true':'false');
     }
     render();
   });
 });
+(function(){
+  var n = D.worklist.filter(function(r){return !!r.mieux;}).length;
+  if(n) $('#fmaj').hidden = false;
+})();
+
 render();
 </script>
 </body>
