@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Console de triage des vulnerabilites SCC - application locale.
+SCC vulnerability triage console - local application.
 
-Interroge BigQuery en direct via la CLI `bq` (deja authentifiee), croise le
-resultat avec l'etat reel de Cloud Run lu via `gcloud`, et sert le tableau de
-bord sur http://localhost:8787
+Queries BigQuery live through the `bq` CLI (already authenticated), cross-checks
+the result with the real state of Cloud Run read through `gcloud`, and serves
+the dashboard on http://localhost:8787
 
-Aucune dependance a installer : stdlib Python uniquement.
+Nothing to install: Python stdlib only.
 
-Usage :
-    python app.py              # port 8787, accessible depuis ce PC seulement
-    python app.py 9000         # autre port
-    python app.py --lan        # accessible depuis le telephone (meme Wi-Fi)
+Usage:
+    python app.py              # port 8787, reachable from this PC only
+    python app.py 9000         # another port
+    python app.py --lan        # reachable from a phone (same Wi-Fi)
 """
 
 import http.server
@@ -34,34 +34,34 @@ from datetime import datetime
 PROJET = "my-gcp-project"
 DATASET = "my-gcp-project.scc_findings"
 LOCATION = "me-west1"
-REGION_RUN = "me-west1"     # region ou vivent les services Cloud Run sondes
-TTL = 600                   # secondes avant qu'un rechargement relance tout
+REGION_RUN = "me-west1"     # region where the probed Cloud Run services live
+TTL = 600                   # seconds before a reload reruns everything
 ICI = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(ICI, "app_tpl.html")
 
 FINDINGS = f"`{DATASET}.findings`"
 
-# Meme deduplication que v_today_vulnerabilities_whole_picture (dernier etat
-# connu de chaque finding), mais SANS son filtre state = "ACTIVE".
+# Same deduplication as v_today_vulnerabilities_whole_picture (last known
+# state of each finding), but WITHOUT its state = "ACTIVE" filter.
 #
-# SCC passe en INACTIVE des findings qu'Artifact Registry affiche toujours.
-# Verifie le 2026-10-06 sur example-service@sha256:6fa15066 en service :
-# SCC ne garde aucun Critical/High actif, la console Artifact Registry
-# (scan actif) affiche 2 Critical et 7 High openssl, exactement les 9
-# findings que SCC a retires. La vue faisait donc disparaitre du tableau
-# 37 des 50 images Cloud Run du depot docker-images.
+# SCC sets to INACTIVE findings that Artifact Registry still shows.
+# Checked on 2026-10-06 on example-service@sha256:6fa15066 in service:
+# SCC keeps no active Critical/High, while the Artifact Registry console
+# (active scan) shows 2 Critical and 7 High openssl, exactly the 9
+# findings SCC retired. The view therefore made 37 of the 50 Cloud Run
+# images of the docker-images repository disappear from the dashboard.
 #
-# Ce n'est pas exact a 100 % : SCC fige un finding INACTIVE et l'export ne
-# dit pas si Artifact Analysis l'a supprime depuis. Sur
-# srloginpermissionscloudapi@sha256:eded8302, la console affiche les 15
-# Critical mais masque 5 des 118 High (CVE-2026-55199, -55200, -66033,
-# -66035, -82560). Aucun champ de l'export ne les distingue des retires
-# encore affiches ; seule l'API Artifact Analysis donnerait le chiffre exact.
+# This is not 100 % exact: SCC freezes an INACTIVE finding and the export
+# does not say whether Artifact Analysis has deleted it since. On
+# srloginpermissionscloudapi@sha256:eded8302, the console shows the 15
+# Critical but hides 5 of the 118 High (CVE-2026-55199, -55200, -66033,
+# -66035, -82560). No field of the export tells them apart from the retired
+# ones still shown; only the Artifact Analysis API would give the exact count.
 #
-# Regle retenue : pour une image en service, tout finding connu compte (elle
-# existe, la console le montre). Pour le stock non deploye, on s'en tient a
-# l'etat SCC : une image supprimee du registre laisse aussi des findings
-# INACTIVE, et rien dans l'export ne permet de la distinguer.
+# Rule chosen: for an image in service, every known finding counts (the image
+# exists, the console shows it). For the undeployed stock, we stick to the
+# SCC state: an image deleted from the registry also leaves INACTIVE
+# findings, and nothing in the export can tell it apart.
 VUE = f"""(
   WITH dernier AS (
     SELECT
@@ -113,16 +113,16 @@ VUE = f"""(
     AND d.severity IN ("HIGH", "CRITICAL")
 )"""
 
-# Fenetres proposees dans l'interface. La vue est dedoublonnee : event_time y
-# est la date du DERNIER signalement d'une vulnerabilite, pas sa decouverte.
-# Filtrer dessus repond donc a "quoi de neuf", pas a "qu'est-ce qui reste".
+# Time windows offered in the UI. The view is deduplicated: event_time there
+# is the date of the LAST report of a vulnerability, not its discovery.
+# Filtering on it therefore answers "what's new", not "what's left".
 PERIODES = {
-    "all": ("Tout", ""),
+    "all": ("All", ""),
     "1m":  ("1 min",  "INTERVAL 1 MINUTE"),
     "1h":  ("1 h",    "INTERVAL 1 HOUR"),
     "24h": ("24 h",   "INTERVAL 24 HOUR"),
-    "7d":  ("7 jours", "INTERVAL 7 DAY"),
-    "30d": ("30 jours", "INTERVAL 30 DAY"),
+    "7d":  ("7 days", "INTERVAL 7 DAY"),
+    "30d": ("30 days", "INTERVAL 30 DAY"),
 }
 PERIODE_DEFAUT = "all"
 MARQUEUR = "__PERIODE__"
@@ -132,7 +132,7 @@ RE_DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
 
 
 def clause_periode(periode):
-    """Clause AND a injecter dans les requetes portant sur la vue."""
+    """AND clause to inject into the queries on the view."""
     intervalle = PERIODES.get(periode, PERIODES[PERIODE_DEFAUT])[1]
     if not intervalle:
         return ""
@@ -146,24 +146,24 @@ FILTRE_IMG = (
 )
 
 # --------------------------------------------------------------------------
-# Ce qui tourne vraiment
+# What really runs
 # --------------------------------------------------------------------------
 #
-# Deux pieges se cumulent dans les donnees d'inventaire, et tous deux
-# gonflent artificiellement le perimetre "deploye" :
+# Two traps add up in the inventory data, and both artificially inflate
+# the "deployed" scope:
 #
-# 1. v_runtime_org_images_all liste TOUTES les revisions Cloud Run jamais
-#    inventoriees. 1973 des 2114 revisions du parc portent la condition
-#    Active = "Retired" : sans filtre, les CVE d'un build retire depuis des
-#    mois sont imputees au service qui tourne aujourd'hui.
+# 1. v_runtime_org_images_all lists EVERY Cloud Run revision ever
+#    inventoried. 1973 of the fleet's 2114 revisions carry the condition
+#    Active = "Retired": without a filter, the CVEs of a build retired
+#    months ago are attributed to the service running today.
 #
-# 2. L'export Cloud Asset Inventory est un instantane : il a plusieurs
-#    semaines de retard. Meme la revision qu'il croit active peut avoir ete
-#    remplacee depuis.
+# 2. The Cloud Asset Inventory export is a snapshot: it lags several
+#    weeks behind. Even the revision it believes active may have been
+#    replaced since.
 #
-# Le CTE ci-dessous regle le point 1. Le point 2 se regle en sondant
-# Cloud Run en direct (sonder_cloud_run), seule source qui dise quelle
-# revision sert le trafic maintenant, et sous quelle image exacte.
+# The CTE below fixes point 1. Point 2 is fixed by probing Cloud Run live
+# (sonder_cloud_run), the only source that says which revision serves
+# traffic right now, and with which exact image.
 
 CTE_RUNTIME = f"""
   revisions_cai AS (
@@ -193,9 +193,9 @@ CTE_RUNTIME = f"""
           OVER (PARTITION BY proj, loc, svc) AS vivantes
       FROM revisions_cai r
     )
-    -- Repli : si toutes les revisions d'un service sont retirees (service
-    -- supprime, ou inventaire partiel), on garde la plus recente plutot que
-    -- de faire disparaitre le workload sans le dire.
+    -- Fallback: if every revision of a service is retired (service
+    -- deleted, or partial inventory), keep the most recent one rather than
+    -- silently making the workload disappear.
     WHERE IFNULL(raison, "") != "Retired" OR (vivantes = 0 AND rn = 1)
   ),
   pods_vivants AS (
@@ -206,7 +206,7 @@ CTE_RUNTIME = f"""
       IFNULL(REGEXP_EXTRACT(name, r"namespaces/([^/]+)"), "") AS ns
     FROM `{DATASET}.assets_org_runtime`
     WHERE asset_type = "k8s.io/Pod"
-      -- un pod Succeeded ou Failed ne fait plus tourner son image
+      -- a Succeeded or Failed pod no longer runs its image
       AND IFNULL(JSON_VALUE(resource.data, "$.status.phase"), "Running")
           NOT IN ("Succeeded", "Failed")
   ),
@@ -227,9 +227,9 @@ CTE_RUNTIME = f"""
   )
 """
 
-# Les labels GCP ne sont exposes par aucune vue : on les lit dans le JSON brut
-# de l'export Cloud Asset Inventory. Un service Cloud Run a plusieurs
-# revisions : on garde la derniere.
+# GCP labels are exposed by no view: they are read from the raw JSON of the
+# Cloud Asset Inventory export. A Cloud Run service has several revisions:
+# the latest one is kept.
 CTE_LABELS = f"""
   labels_src AS (
     SELECT
@@ -268,11 +268,11 @@ CTE_LABELS = f"""
 
 
 # --------------------------------------------------------------------------
-# Requetes : phase 1 (independantes du perimetre deploye)
+# Queries: phase 1 (independent of the deployed scope)
 # --------------------------------------------------------------------------
 
-# Projets hebergeant du Cloud Run. Sert a savoir qui sonder en direct : on la
-# lance en premier pour lancer la sonde pendant que le reste interroge BQ.
+# Projects hosting Cloud Run. Tells which ones to probe live: it runs first
+# so that the probe starts while the rest queries BQ.
 REQ_PROJETS_CR = f"""
     SELECT DISTINCT REGEXP_EXTRACT(name, r"projects/([^/]+)") AS proj
     FROM `{DATASET}.assets_org_runtime`
@@ -281,8 +281,8 @@ REQ_PROJETS_CR = f"""
 """
 
 REQUETES_BASE = {
-    # Projets dont le registre alimente la table des findings. Une image
-    # hebergee ailleurs n'y a aucune ligne, quel que soit son etat reel.
+    # Projects whose registry feeds the findings table. An image hosted
+    # elsewhere has no row there, whatever its real state.
     "exportes": f"""
         SELECT DISTINCT REGEXP_EXTRACT(resource.name, r"projects/([^/]+)") AS p
         FROM {FINDINGS}
@@ -315,9 +315,9 @@ REQUETES_BASE = {
         WHERE jour > DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
         GROUP BY j ORDER BY j
     """,
-    # Date des instantanes sur lesquels repose la partie GKE : l'afficher
-    # evite de faire passer un inventaire vieux de plusieurs semaines pour
-    # l'etat du parc a l'instant present.
+    # Date of the snapshots the GKE part relies on: showing it avoids
+    # passing off an inventory several weeks old as the current state of
+    # the fleet.
     "fraicheur": f"""
         SELECT
           (SELECT FORMAT_TIMESTAMP("%Y-%m-%d %H:%M", MAX(update_time))
@@ -325,10 +325,10 @@ REQUETES_BASE = {
           (SELECT FORMAT_TIMESTAMP("%Y-%m-%d %H:%M", MAX(collected_at))
            FROM `{DATASET}.artifact_registry_tags_inventory`) AS tags
     """,
-    # Gravites par digest sur TOUT le registre, et non sur le seul perimetre
-    # deploye : c'est ce qui permet de dire "une version publiee depuis porte
-    # moins de failles". Volontairement hors periode, sinon la comparaison
-    # dependrait de la fenetre choisie.
+    # Severities per digest over the WHOLE registry, not just the deployed
+    # scope: this is what makes it possible to say "a version published
+    # since carries fewer flaws". Deliberately outside the time window,
+    # otherwise the comparison would depend on the chosen window.
     "severites": f"""
         SELECT repository_name AS repo, image_name AS img,
           REGEXP_EXTRACT(image_digest, r"(sha256:[a-f0-9]{{64}})") AS dig,
@@ -337,8 +337,8 @@ REQUETES_BASE = {
         FROM {VUE}
         GROUP BY repo, img, dig
     """,
-    # Digest -> tag publie. Sert de repli quand la reference deployee est
-    # epinglee par digest et ne porte donc aucune version lisible.
+    # Digest -> published tag. Used as a fallback when the deployed reference
+    # is pinned by digest and therefore carries no readable version.
     "tags": f"""
         SELECT dig, tag FROM (
           SELECT REGEXP_EXTRACT(digest, r"(sha256:[a-f0-9]{{64}})") AS dig,
@@ -349,9 +349,9 @@ REQUETES_BASE = {
           WHERE tag IS NOT NULL AND tag NOT IN ("UNTAGGED", "NO_TAG_FOUND")
         ) WHERE rn = 1
     """,
-    # Emplacements d'execution selon l'inventaire, revisions retirees et pods
-    # termines exclus. Source de verite pour GKE ; repli pour Cloud Run quand
-    # la sonde en direct n'a pas pu repondre.
+    # Runtime placements according to the inventory, retired revisions and
+    # finished pods excluded. Source of truth for GKE; fallback for Cloud Run
+    # when the live probe could not answer.
     "placements": f"""
         WITH {CTE_RUNTIME},
         {CTE_LABELS}
@@ -379,7 +379,7 @@ REQUETES_BASE = {
 
 
 # --------------------------------------------------------------------------
-# Requetes : phase 2 (restreintes aux digests reellement en execution)
+# Queries: phase 2 (restricted to the digests actually running)
 # --------------------------------------------------------------------------
 
 SQL_FINDINGS = f"""
@@ -430,8 +430,8 @@ REQUETES_VULN = {
         WHERE {MARQUEUR_DEP} AND severity = "CRITICAL" __PERIODE__
         GROUP BY id ORDER BY img DESC LIMIT 12
     """,
-    # Une ligne par digest, et non par tag : c'est le digest qui tourne, et
-    # deux digests de la meme image peuvent tourner cote a cote.
+    # One row per digest, not per tag: the digest is what runs, and two
+    # digests of the same image can run side by side.
     "worklist": f"""
         SELECT repository_name AS repo, image_name AS img,
           image_tags AS tags,
@@ -441,7 +441,7 @@ REQUETES_VULN = {
           COUNTIF(fixed_version IS NOT NULL AND fixed_version != "") AS fix,
           COUNT(DISTINCT cve_id) AS cve,
           ANY_VALUE(artifact_registry_url) AS url,
-          -- alimentent la recherche : on cherche aussi par paquet et par CVE
+          -- feed the search: it also matches on package and on CVE
           -- no LIMIT: a truncated list hides findings from the search
           STRING_AGG(DISTINCT package_name, " " ORDER BY package_name) AS pkgs,
           STRING_AGG(DISTINCT cve_id, " " ORDER BY cve_id) AS cves_l
@@ -450,9 +450,9 @@ REQUETES_VULN = {
         GROUP BY repo, img, tags, dig
         ORDER BY c DESC, h DESC
     """,
-    # Part des Critical/High d'une image en service que SCC a retires alors
-    # que la console Artifact Registry les montre encore. Comptes dans les
-    # totaux ; isoles ici pour expliquer l'ecart avec SCC.
+    # Share of the Critical/High of an image in service that SCC retired
+    # while the Artifact Registry console still shows them. Counted in the
+    # totals; isolated here to explain the gap with SCC.
     "retires": f"""
         SELECT REGEXP_EXTRACT(image_digest, r"(sha256:[a-f0-9]{{64}})") AS dig,
           COUNT(*) AS nb,
@@ -472,11 +472,11 @@ REQUETES_VULN = {
     """,
 }
 
-# Digests en service que SCC a analyses au moins une fois, toutes gravites et
-# tous etats confondus. Pour les autres, deux cas a ne pas confondre :
-#  - registre absent de l'export des findings (seul my-gcp-project
-#    y figure au 2026-10-06) : on ne sait rien de l'image ;
-#  - registre exporte : aucune faille remontee, image saine ou non analysee.
+# Digests in service that SCC analyzed at least once, all severities and all
+# states combined. For the others, two cases not to be confused:
+#  - registry missing from the findings export (only my-gcp-project
+#    is there as of 2026-10-06): nothing is known about the image;
+#  - exported registry: no flaw reported, image clean or not analyzed.
 REQ_COUVERTS = f"""
     SELECT DISTINCT REGEXP_EXTRACT(resource.name, r"(sha256:[a-f0-9]{{64}})") AS dig
     FROM {FINDINGS}
@@ -520,7 +520,7 @@ def findings_by_digest(rows):
 
 
 # --------------------------------------------------------------------------
-# Acces aux CLI
+# CLI access
 # --------------------------------------------------------------------------
 
 class ErreurBQ(Exception):
@@ -536,7 +536,7 @@ def _cli(binaire):
 
 
 def lancer_bq(sql, max_rows=50000):
-    """Execute une requete et renvoie une liste de dicts."""
+    """Runs a query and returns a list of dicts."""
     cmd = _cli("bq") + [
         f"--project_id={PROJET}", "query", f"--location={LOCATION}",
         "--use_legacy_sql=false", "--format=json", "--quiet",
@@ -546,12 +546,12 @@ def lancer_bq(sql, max_rows=50000):
                            text=True, encoding="utf-8", errors="replace",
                            timeout=180)
     except subprocess.TimeoutExpired:
-        raise ErreurBQ("La requete a depasse 180 s.")
+        raise ErreurBQ("The query exceeded 180 s.")
     if r.returncode != 0:
         detail = (r.stderr or r.stdout or "").strip()
-        raise ErreurBQ(detail[:600] or f"bq a renvoye le code {r.returncode}")
+        raise ErreurBQ(detail[:600] or f"bq returned code {r.returncode}")
     sortie = (r.stdout or "").strip()
-    # bq peut prefixer la sortie par des lignes d'attente : on isole le JSON
+    # bq may prefix the output with progress lines: isolate the JSON
     debut = sortie.find("[")
     if debut == -1:
         return []
@@ -567,32 +567,32 @@ def lancer_bq(sql, max_rows=50000):
 
 
 def _gcloud(args, timeout=150):
-    """Sortie brute de gcloud, ou ErreurGcloud."""
+    """Raw gcloud output, or ErreurGcloud."""
     try:
         r = subprocess.run(_cli("gcloud") + args, capture_output=True,
                            text=True, encoding="utf-8", errors="replace",
                            timeout=timeout)
     except subprocess.TimeoutExpired:
-        raise ErreurGcloud(f"gcloud a depasse {timeout} s")
+        raise ErreurGcloud(f"gcloud exceeded {timeout} s")
     except FileNotFoundError:
-        raise ErreurGcloud("gcloud est introuvable dans le PATH")
+        raise ErreurGcloud("gcloud not found in the PATH")
     if r.returncode != 0:
         raise ErreurGcloud((r.stderr or r.stdout or "").strip()[:300]
-                           or f"gcloud a renvoye le code {r.returncode}")
+                           or f"gcloud returned code {r.returncode}")
     return (r.stdout or "").strip()
 
 
-# L'API Cloud Run est interrogee en HTTP plutot que par `gcloud run` : une
-# centaine d'appels CLI coutent une demi-minute en lancements de processus,
-# les memes requetes en HTTP tiennent en quelques secondes. Le jeton vient de
-# gcloud, n'est jamais ecrit sur disque et expire de lui-meme.
+# The Cloud Run API is queried over HTTP rather than through `gcloud run`: a
+# hundred CLI calls cost half a minute of process launches, the same requests
+# over HTTP take a few seconds. The token comes from gcloud, is never written
+# to disk and expires on its own.
 API_RUN = f"https://{REGION_RUN}-run.googleapis.com/apis/serving.knative.dev/v1"
 
 
 def jeton_acces():
     jeton = _gcloud(["auth", "print-access-token"], timeout=60)
     if not jeton:
-        raise ErreurGcloud("gcloud n'a pas renvoye de jeton d'acces")
+        raise ErreurGcloud("gcloud returned no access token")
     return jeton.splitlines()[-1].strip()
 
 
@@ -612,15 +612,15 @@ def _api_run(chemin, jeton, timeout=60):
             pass
         raise ErreurGcloud(f"HTTP {exc.code} : {detail or exc.reason}"[:300])
     except urllib.error.URLError as exc:
-        raise ErreurGcloud(f"Cloud Run injoignable : {exc.reason}")
+        raise ErreurGcloud(f"Cloud Run unreachable: {exc.reason}")
 
 
 # --------------------------------------------------------------------------
-# References d'image
+# Image references
 # --------------------------------------------------------------------------
 
 def digest_de(ref):
-    """Digest porte par une reference d'image, ou chaine vide."""
+    """Digest carried by an image reference, or an empty string."""
     if not ref or "@" not in ref:
         return ""
     d = ref.rsplit("@", 1)[1].strip()
@@ -628,10 +628,10 @@ def digest_de(ref):
 
 
 def version_de(ref):
-    """Tag porte par une reference d'image, ou chaine vide.
+    """Tag carried by an image reference, or an empty string.
 
-    Le tag est la partie apres ':' du dernier segment, en ignorant le port
-    eventuel du registre et le digest.
+    The tag is the part after ':' of the last segment, ignoring the registry
+    port, if any, and the digest.
     """
     if not ref:
         return ""
@@ -640,7 +640,7 @@ def version_de(ref):
 
 
 def chemin_image(ref):
-    """Reference sans tag ni digest : le nom d'image nu."""
+    """Reference without tag or digest: the bare image name."""
     chemin = (ref or "").split("@", 1)[0]
     tete, _, dernier = chemin.rpartition("/")
     if ":" in dernier:
@@ -649,14 +649,14 @@ def chemin_image(ref):
 
 
 # --------------------------------------------------------------------------
-# Versions publiees dans Artifact Registry
+# Versions published in Artifact Registry
 # --------------------------------------------------------------------------
 
 API_AR = "https://artifactregistry.googleapis.com/v1"
 
 
 def _decomposer_ar(ref):
-    """(projet, region, depot, image) d'une reference Artifact Registry."""
+    """(project, region, repository, image) of an Artifact Registry reference."""
     parts = chemin_image(ref).split("/")
     if len(parts) < 4 or "-docker.pkg.dev" not in parts[0]:
         return None
@@ -664,10 +664,10 @@ def _decomposer_ar(ref):
             parts[2], "/".join(parts[3:]))
 
 
-# Une image multi-architecture n'est pas taguee sur le conteneur mais sur
-# l'index qui le reference. Le digest qu'execute une revision Cloud Run est
-# celui de l'enfant amd64 : Artifact Registry ne lui attache aucun tag, et
-# demander "quelle version tourne ?" impose de remonter a l'index parent.
+# A multi-architecture image is not tagged on the container but on the
+# index that references it. The digest a Cloud Run revision runs is that of
+# the amd64 child: Artifact Registry attaches no tag to it, and asking "which
+# version is running?" requires going up to the parent index.
 ACCEPT_MANIFESTE = ",".join((
     "application/vnd.oci.image.index.v1+json",
     "application/vnd.docker.distribution.manifest.list.v2+json",
@@ -675,18 +675,18 @@ ACCEPT_MANIFESTE = ",".join((
     "application/vnd.docker.distribution.manifest.v2+json",
 ))
 
-# L'appartenance d'un digest a un index ne change jamais : un index est
-# immuable. On memorise donc les resolutions pour la duree du processus, et
-# les rechargements suivants ne repaient pas le parcours des manifestes.
+# A digest's membership in an index never changes: an index is immutable.
+# Resolutions are therefore cached for the lifetime of the process, and the
+# following reloads don't pay for walking the manifests again.
 _versions_vues = {}
 _verrou_versions = threading.Lock()
 
 
 def _registre_v2(chemin, suffixe, jeton, timeout=30):
-    """Appel a l'API registre Docker v2, qui seule expose les manifestes."""
+    """Call to the Docker v2 registry API, the only one exposing manifests."""
     parts = chemin.split("/")
     if len(parts) < 4:
-        raise ErreurGcloud(f"chemin d'image inattendu : {chemin}")
+        raise ErreurGcloud(f"unexpected image path: {chemin}")
     url = (f"https://{parts[0]}/v2/{parts[1]}/{parts[2]}/"
            f"{'/'.join(parts[3:])}/{suffixe}")
     req = urllib.request.Request(
@@ -700,21 +700,22 @@ def _registre_v2(chemin, suffixe, jeton, timeout=30):
 
 
 def resoudre_versions(cibles, jeton):
-    """Version sous laquelle Artifact Registry publie aujourd'hui un digest.
+    """Version under which Artifact Registry publishes a digest today.
 
-    `cibles` associe un digest au chemin de son image et, quand il existe, au
-    tag que le deploiement reclame — essaye en premier parce que c'est
-    presque toujours le bon.
+    `cibles` maps a digest to the path of its image and, when there is one,
+    to the tag the deployment asks for — tried first because it is almost
+    always the right one.
 
-    Deux lectures se completent :
+    Two lookups complement each other:
 
-    1. le tag pose directement sur le digest (image mono-architecture) ;
-    2. sinon, le tag de l'index qui reference ce digest (image multi-arch).
+    1. the tag set directly on the digest (single-architecture image);
+    2. otherwise, the tag of the index that references this digest
+       (multi-arch image).
 
-    Ce qui sort est verifiable : "ce conteneur s'appelle X aujourd'hui". Le
-    tag reclame par un service Cloud Run, lui, n'est qu'une chaine figee dans
-    le gabarit ; il peut avoir ete republie ailleurs depuis le dernier
-    deploiement. L'ecart entre les deux est justement ce qu'il faut montrer.
+    The output is verifiable: "this container is called X today". The tag
+    a Cloud Run service asks for, on the other hand, is just a string frozen
+    in the template; it may have been republished elsewhere since the last
+    deployment. The gap between the two is exactly what must be shown.
     """
     if not jeton or not cibles:
         return {}
@@ -725,7 +726,7 @@ def resoudre_versions(cibles, jeton):
     if not restants:
         return resultats
 
-    # 1. tag direct sur le digest
+    # 1. tag directly on the digest
     def direct(item):
         dig, cible = item
         pieces = _decomposer_ar(cible["chemin"])
@@ -742,16 +743,16 @@ def resoudre_versions(cibles, jeton):
             with urllib.request.urlopen(req, timeout=30) as rep:
                 tags = json.load(rep).get("tags") or []
         except (urllib.error.URLError, ValueError, OSError):
-            return      # image purgee, droits manquants : on s'en passe
+            return      # image purged, missing permissions: do without
         if tags:
-            # le registre ne garantit aucun ordre : on trie pour que deux
-            # chargements successifs ne nomment pas la meme image autrement
+            # the registry guarantees no order: sort so that two successive
+            # loads don't name the same image differently
             resultats[dig] = sorted(tags)
 
     with ThreadPoolExecutor(max_workers=16) as pool:
         list(pool.map(direct, restants.items()))
 
-    # 2. remontee aux index, pour les digests restes sans tag
+    # 2. go up to the indexes, for digests still without a tag
     par_chemin = {}
     for dig, cible in restants.items():
         if dig not in resultats:
@@ -770,15 +771,15 @@ def resoudre_versions(cibles, jeton):
 
 
 def _resoudre_index(par_chemin, resultats, jeton):
-    """Parcourt les tags d'une image jusqu'a retrouver ses digests cibles."""
+    """Walks the tags of an image until its target digests are found."""
     def lister(chemin):
         try:
             rep, _ = _registre_v2(chemin, "tags/list", jeton)
         except ErreurGcloud:
             return chemin, []
         tags = rep.get("tags") or []
-        # le tag reclame par le deploiement d'abord : c'est le candidat
-        # le plus probable, et le trouver evite de derouler tout le reste
+        # the tag the deployment asks for first: it is the most likely
+        # candidate, and finding it avoids walking through all the rest
         prioritaires = [t for t in par_chemin[chemin]["tags"] if t in tags]
         return chemin, prioritaires + [t for t in tags if t not in prioritaires]
 
@@ -791,7 +792,7 @@ def _resoudre_index(par_chemin, resultats, jeton):
         chemin, tag = item
         manquants = par_chemin[chemin]["digests"] - set(resultats)
         if not manquants:
-            return      # tous les digests de cette image sont deja nommes
+            return      # every digest of this image is already named
         try:
             manifeste, propre = _registre_v2(chemin, f"manifests/{tag}", jeton)
         except ErreurGcloud:
@@ -807,11 +808,11 @@ def _resoudre_index(par_chemin, resultats, jeton):
 
 
 def inventaire_versions(chemins, jeton):
-    """Versions publiees d'une image : digest, date de creation, tags.
+    """Published versions of an image: digest, creation date, tags.
 
-    Un appel par image suffit, la ou interroger chaque digest en coutait un
-    par digest. La date de creation est ce qui manque partout ailleurs : sans
-    elle, impossible de dire qu'une version est "plus recente".
+    One call per image is enough, where querying each digest cost one call
+    per digest. The creation date is what is missing everywhere else:
+    without it, there is no way to say that a version is "more recent".
     """
     if not jeton or not chemins:
         return {}
@@ -858,12 +859,12 @@ def inventaire_versions(chemins, jeton):
     return inventaire
 
 
-# Une publication multi-architecture depose plusieurs objets sous le meme
-# numero : un index sans taille, l'image par plateforme, et des attestations
-# de quelques kilo-octets. Seule l'image est executable — et SCC analyse les
-# trois separement, en ne voyant qu'un sous-ensemble des failles sur l'index.
-# Comparer sans trier ferait passer l'index d'une version pour un progres.
-TAILLE_MINI_IMAGE = 1 << 20      # en dessous, c'est une attestation
+# A multi-architecture push stores several objects under the same version:
+# a sizeless index, the per-platform image, and attestations of a few
+# kilobytes. Only the image is runnable — and SCC analyzes the three
+# separately, seeing only a subset of the flaws on the index. Comparing
+# without sorting would pass off a version's index as progress.
+TAILLE_MINI_IMAGE = 1 << 20      # below that, it is an attestation
 
 
 def est_image_executable(infos):
@@ -872,11 +873,11 @@ def est_image_executable(infos):
 
 
 def meilleure_version(dig, chemin, inventaire, severites):
-    """Version publiee depuis, et moins vulnerable que celle en service.
+    """Version published since, and less vulnerable than the one in service.
 
-    Ne compare que des digests que SCC a reellement analyses : une version
-    absente de ses findings peut etre saine comme jamais scannee, et la
-    presenter comme un progres serait un mensonge par omission.
+    Only compares digests SCC actually analyzed: a version missing from its
+    findings may be clean or never scanned, and presenting it as progress
+    would be a lie by omission.
     """
     versions = inventaire.get(chemin) or {}
     courante = versions.get(dig)
@@ -896,7 +897,7 @@ def meilleure_version(dig, chemin, inventaire, severites):
             candidates.append((c, h, infos["cree"], autre))
     if not candidates:
         return None
-    # la moins vulnerable d'abord, la plus recente pour departager
+    # least vulnerable first, most recent as the tie-breaker
     c, h, cree, autre = min(candidates, key=lambda x: (x[0], x[1], x[2]))
     return {"dig": autre, "c": c, "h": h, "cree": cree[:10],
             "ver": (versions[autre].get("tags") or [""])[0]}
@@ -967,7 +968,7 @@ def gravites_derniere(dernieres, severites, jeton):
 
 
 def lien_registre(chemin, dig):
-    """Page Artifact Registry du digest exact, dans la Cloud Console."""
+    """Artifact Registry page of the exact digest, in the Cloud Console."""
     pieces = _decomposer_ar(chemin)
     if not pieces or not dig:
         return ""
@@ -977,34 +978,36 @@ def lien_registre(chemin, dig):
 
 
 # --------------------------------------------------------------------------
-# Provenance : depot de code et responsable
+# Provenance: code repository and owner
 # --------------------------------------------------------------------------
 #
-# Aucun lien n'est fabrique : un depot n'est affiche que s'il existe.
-#  - "sur"     : l'image nomme son depot (label pose au build), ou un depot
-#                Secure Source Manager porte exactement le nom de l'image ;
-#  - "suppose" : un seul depot SSM porte le meme nom au prefixe "ita-" et au
-#                suffixe "-api" pres, ou un nom qui prolonge l'autre de trois
-#                caracteres au plus (event-handle / event-handler-api) ;
-#  - sinon rien.
-# Le responsable est l'auteur du plus grand nombre de commits du depot, avec
-# la certitude du depot dont il est tire.
+# No link is made up: a repository is only shown if it exists.
+#  - "sur"     (certain): the image names its repository (label set at
+#                build time), or a Secure Source Manager repository has
+#                exactly the image's name;
+#  - "suppose" (assumed): a single SSM repository has the same name give or
+#                take the "ita-" prefix and the "-api" suffix, or a name
+#                that extends the other by three characters at most
+#                (event-handle / event-handler-api);
+#  - otherwise nothing.
+# The owner is the author of the most commits in the repository, with the
+# certainty of the repository it comes from.
 
 SSM_INSTANCE = "my-ssm-instance"
 SSM_PROJET = "my-git-project"
 SSM_REGION = "me-west1"
 DOSSIER_DEPOTS = os.path.join(
     os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"),
-    "console-vuln", "depots")              # hors de tout depot versionne
+    "console-vuln", "depots")              # outside any versioned repository
 CACHE_PROVENANCE = os.path.join(ICI, "provenance.local.json")
 _verrou_prov = threading.Lock()
 
-# Cles de label qui nomment le depot source, par ordre de preference.
+# Label keys that name the source repository, in order of preference.
 LABELS_DEPOT = ("org.opencontainers.image.source", "org.label-schema.vcs-url",
                 "vcs-url")
 LABELS_COMMIT = ("org.opencontainers.image.revision",
                  "org.label-schema.vcs-ref")
-# Valeurs de gabarit jamais remplies
+# Template values never filled in
 VALEURS_VIDES = {"name", "author", "maintainer", "unknown", "todo", "none"}
 
 
@@ -1017,9 +1020,9 @@ def _lire_cache_provenance():
 
 
 def labels_image(chemin, dig, jeton):
-    """Labels poses au build, lus dans la configuration de l'image."""
+    """Labels set at build time, read from the image configuration."""
     man, _ = _registre_v2(chemin, f"manifests/{dig}", jeton)
-    if man.get("manifests"):                # index : l'enfant amd64
+    if man.get("manifests"):                # index: the amd64 child
         enfant = next((m for m in man["manifests"]
                        if (m.get("platform") or {}).get("architecture") == "amd64"),
                       man["manifests"][0])
@@ -1032,7 +1035,7 @@ def labels_image(chemin, dig, jeton):
 
 
 def provenance_labels(cibles, jeton):
-    """{digest: labels} ; un digest etant immuable, le cache est definitif."""
+    """{digest: labels}; a digest being immutable, the cache is permanent."""
     cache = _lire_cache_provenance()
     a_lire = [(dig, chemin) for dig, chemin in cibles.items()
               if dig not in cache and _decomposer_ar(chemin)]
@@ -1042,7 +1045,7 @@ def provenance_labels(cibles, jeton):
         try:
             return dig, labels_image(chemin_image(chemin), dig, jeton)
         except ErreurGcloud:
-            return dig, None                 # on retentera au prochain tour
+            return dig, None                 # retried on the next round
 
     if a_lire and jeton:
         with ThreadPoolExecutor(max_workers=8) as pool:
@@ -1080,9 +1083,9 @@ def _label(labels, cles, suffixe=None):
 
 
 def depots_ssm():
-    """{nom: (url web, url git)} des depots Secure Source Manager.
+    """{name: (web url, git url)} of the Secure Source Manager repositories.
 
-    Un seul appel par rafraichissement : la liste de l'instance, rien de plus.
+    A single call per refresh: the instance's list, nothing more.
     """
     sortie = _gcloud(["source-manager", "repos", "list",
                       f"--instance={SSM_INSTANCE}", f"--region={SSM_REGION}",
@@ -1103,7 +1106,7 @@ def _coeur(nom):
 
 
 def trouver_depot(image, depots):
-    """(nom du depot, "sur" | "suppose") ou (None, None)."""
+    """(repository name, "sur" | "suppose") or (None, None)."""
     norm = lambda x: re.sub(r"[^a-z0-9]", "", x.lower())
     exacts = [d for d in depots if norm(d) == norm(image)]
     if len(exacts) == 1:
@@ -1120,7 +1123,7 @@ def trouver_depot(image, depots):
 
 
 def _env_git(jeton):
-    """Authentification passee par l'environnement : rien n'est ecrit."""
+    """Authentication passed through the environment: nothing is written."""
     import base64
     cle = base64.b64encode(f"oauth2:{jeton}".encode()).decode()
     return {**os.environ, "GIT_TERMINAL_PROMPT": "0",
@@ -1130,10 +1133,9 @@ def _env_git(jeton):
 
 
 def principal_contributeur(nom, url_git, jeton):
-    """(auteur, ses commits, total) d'apres l'historique du depot.
+    """(author, their commits, total) according to the repository history.
 
-    Clone nu, sans le contenu des fichiers ; les rafraichissements suivants
-    ne font qu'un fetch.
+    Bare clone, without file contents; the following refreshes only fetch.
     """
     cible = os.path.join(DOSSIER_DEPOTS, nom + ".git")
     env = _env_git(jeton)
@@ -1141,7 +1143,7 @@ def principal_contributeur(nom, url_git, jeton):
         marque = os.path.join(cible, "FETCH_HEAD")
         if os.path.isdir(cible) and os.path.exists(marque) \
                 and time.time() - os.path.getmtime(marque) < 3600:
-            pass                            # historique lu il y a moins d'1 h
+            pass                            # history read less than 1 h ago
         elif os.path.isdir(cible):
             subprocess.run(["git", "-C", cible, "fetch", "-q", "origin",
                             "+refs/heads/*:refs/heads/*"],
@@ -1159,8 +1161,8 @@ def principal_contributeur(nom, url_git, jeton):
         return None
     if r.returncode != 0:
         return None
-    # Compte par adresse : une meme personne signe parfois sous plusieurs
-    # noms (yonathanb, Yonathan...) avec le meme e-mail.
+    # Count per address: the same person sometimes signs under several
+    # names (bob, Bob...) with the same e-mail.
     par_mail, noms = {}, {}
     for ligne in r.stdout.splitlines():
         mail, _, nom = ligne.partition("\t")
@@ -1177,8 +1179,8 @@ def principal_contributeur(nom, url_git, jeton):
 
 
 def depots_et_contributeurs(images, jeton):
-    """{image: {nom, url, etat, auteur, commits, total}} pour les images
-    dont un depot SSM a ete trouve."""
+    """{image: {nom, url, etat, auteur, commits, total}} for the images
+    whose SSM repository was found."""
     try:
         depots = depots_ssm()
     except ErreurGcloud:
@@ -1205,9 +1207,9 @@ def depots_et_contributeurs(images, jeton):
 
 
 def decrire_provenance(dig, chemin, labels, ssm):
-    """Depot et responsable d'une image, chacun avec son niveau de certitude.
+    """Repository and owner of an image, each with its certainty level.
 
-    `ssm` est l'entree de depots_et_contributeurs pour cette image, ou None.
+    `ssm` is the depots_et_contributeurs entry for this image, or None.
     """
     labels = labels or {}
     depot = {"etat": "inconnu", "url": "", "source": ""}
@@ -1217,16 +1219,16 @@ def decrire_provenance(dig, chemin, labels, ssm):
         url = "https://" + url
     if url:
         depot = {"etat": "sur", "url": url,
-                 "source": f"declare par l'image (label {k})"}
+                 "source": f"declared by the image (label {k})"}
     elif ssm:
         depot = {"etat": ssm["etat"], "url": ssm["url"],
-                 "source": f"depot Secure Source Manager {ssm['nom']}"
-                           + (" : nom proche de celui de l'image"
+                 "source": f"Secure Source Manager repository {ssm['nom']}"
+                           + (": name close to the image's"
                               if ssm["etat"] == "suppose" else "")}
         if ssm.get("auteur"):
             dev = {"etat": ssm["etat"], "nom": ssm["auteur"],
-                   "source": f"{ssm['commits']} commits sur {ssm['total']} "
-                             f"dans {ssm['nom']}"}
+                   "source": f"{ssm['commits']} of {ssm['total']} commits "
+                             f"in {ssm['nom']}"}
     depot["commit"] = _label(labels, LABELS_COMMIT, ".sourceversion")[1]
     return depot, dev
 
@@ -1259,22 +1261,23 @@ def apply_declared_owner(dev, image, owners):
 
 
 # --------------------------------------------------------------------------
-# Sonde Cloud Run en direct
+# Live Cloud Run probe
 # --------------------------------------------------------------------------
 
 def sonder_cloud_run(projets, jeton):
-    """Ce que Cloud Run execute reellement, a l'instant present.
+    """What Cloud Run really runs, right now.
 
-    L'inventaire BigQuery ne peut pas repondre : c'est un instantane, et il
-    conserve les revisions retirees. Seule l'API Cloud Run dit quelle revision
-    sert le trafic maintenant, et sous quelle reference d'image exacte.
+    The BigQuery inventory cannot answer: it is a snapshot, and it keeps the
+    retired revisions. Only the Cloud Run API says which revision serves
+    traffic now, and with which exact image reference.
 
-    Renvoie ({(projet, service): [entrees]}, {projet: erreur}, {projets lus}).
+    Returns ({(project, service): [entries]}, {project: error},
+    {projects read}).
     """
     services, erreurs, lus = {}, {}, set()
     a_resoudre, a_comparer = [], []
     if not jeton:
-        return {}, {"*": "jeton d'acces gcloud indisponible"}, set()
+        return {}, {"*": "gcloud access token unavailable"}, set()
 
     def lister(proj):
         try:
@@ -1284,7 +1287,7 @@ def sonder_cloud_run(projets, jeton):
             return proj, None, str(exc)
 
     def resoudre(entree):
-        """Digest reellement execute par une revision donnee."""
+        """Digest actually run by a given revision."""
         try:
             rev = _api_run(
                 f"namespaces/{entree['proj']}/revisions/{entree['rev']}",
@@ -1297,7 +1300,7 @@ def sonder_cloud_run(projets, jeton):
         entree["ref"] = entree["ref"] or ref
 
     def comparer(entree):
-        """Image portee par la derniere revision, celle qui ne sert pas."""
+        """Image carried by the latest revision, the one not serving."""
         try:
             rev = _api_run(
                 f"namespaces/{entree['proj']}/revisions/{entree['recente']}",
@@ -1324,13 +1327,13 @@ def sonder_cloud_run(projets, jeton):
                 ref_spec = conteneurs[0].get("image") or ""
                 statut = s.get("status") or {}
                 dernier = statut.get("latestReadyRevisionName") or ""
-                # La derniere revision CREEE, et non la derniere "prete" :
-                # une revision deployee puis rendue au repos redevient
-                # "Retired" et cesse de compter comme prete, alors qu'elle
-                # porte bien la derniere image publiee.
+                # The latest CREATED revision, not the latest "ready" one:
+                # a revision deployed then idled becomes "Retired" again and
+                # stops counting as ready, although it does carry the latest
+                # published image.
                 recente = statut.get("latestCreatedRevisionName") or dernier
-                # Un trafic epingle nomme explicitement sa revision ; un
-                # service qui suit ses deploiements dit "latestRevision".
+                # Pinned traffic names its revision explicitly; a service
+                # that follows its deployments says "latestRevision".
                 epingle = any(
                     t.get("revisionName") and not t.get("latestRevision")
                     for t in ((s.get("spec") or {}).get("traffic") or []))
@@ -1340,28 +1343,28 @@ def sonder_cloud_run(projets, jeton):
                              if t.get("revisionName")]
                 if not servantes and dernier:
                     servantes = [(dernier, 100, "")]
-                # Le digest vient TOUJOURS de la revision, jamais du
-                # gabarit. Un gabarit epingle sur `@sha256:` peut nommer
-                # l'index d'une image multi-architecture ; ce que le
-                # conteneur execute est l'enfant amd64 que la revision a
-                # resolu, et lui seul porte les couches analysees.
+                # The digest ALWAYS comes from the revision, never from the
+                # template. A template pinned on `@sha256:` may name the
+                # index of a multi-architecture image; what the container
+                # runs is the amd64 child the revision resolved, and only
+                # that one carries the analyzed layers.
                 for rev, part, tag_url in servantes:
                     entree = {
                         "proj": proj, "svc": nom, "rev": rev,
                         "part": part, "tag_url": tag_url,
                         "ref": "",
                         "dig": "",
-                        # Le tag du gabarit ne vaut que pour la derniere
-                        # revision : une revision figee par un partage de
-                        # trafic execute autre chose.
+                        # The template's tag only applies to the latest
+                        # revision: a revision frozen by a traffic split
+                        # runs something else.
                         "ver": version_de(ref_spec) if rev == dernier else "",
-                        # Ce service sert-il bien sa derniere revision ?
+                        # Does this service really serve its latest revision?
                         "recente": recente,
                         "epingle": epingle,
                         "retard": bool(recente and rev != recente),
                         "recente_dig": "",
-                        # lus en direct : l'inventaire peut avoir des
-                        # semaines de retard sur les labels
+                        # read live: the inventory can lag weeks behind
+                        # on labels
                         "labels_live": meta_svc.get("labels") or {},
                         "createur": ann.get("serving.knative.dev/creator") or "",
                         "modificateur": ann.get("serving.knative.dev/lastModifier") or "",
@@ -1378,12 +1381,12 @@ def sonder_cloud_run(projets, jeton):
 
 
 # --------------------------------------------------------------------------
-# Mise en forme
+# Formatting
 # --------------------------------------------------------------------------
 
 CONSOLE = "https://console.cloud.google.com"
 
-# Labels poses par la plateforme : ils n'apprennent rien sur le workload.
+# Labels set by the platform: they tell nothing about the workload.
 LABELS_SYSTEME = (
     "serving.knative.dev/", "client.knative.dev/", "autoscaling.knative.dev/",
     "run.googleapis.com/", "cloud.googleapis.com/", "topology.kubernetes.io/",
@@ -1397,12 +1400,12 @@ LABELS_IGNORES = {
 
 
 def nettoyer_labels(brut):
-    """Ne garde que les labels poses par vos equipes."""
+    """Keeps only the labels set by your teams."""
     if not brut or brut == "null":
         return {}
     try:
         obj = json.loads(brut)
-        if isinstance(obj, str):      # JSON_QUERY rend parfois une chaine
+        if isinstance(obj, str):      # JSON_QUERY sometimes returns a string
             obj = json.loads(obj)
     except (ValueError, TypeError):
         return {}
@@ -1416,10 +1419,10 @@ def nettoyer_labels(brut):
 
 
 def est_prod(projet):
-    """Un projet est de production sauf s'il est explicitement nonprod/stg.
+    """A project is production unless it is explicitly nonprod/stg.
 
-    Les noms suivent la convention ita-<site>-<env>-<role>, ou 'nonprod'
-    contient deja 'prod' : l'ordre des tests compte.
+    Names follow the <org>-<site>-<env>-<role> convention, where 'nonprod'
+    already contains 'prod': the order of the checks matters.
     """
     p = (projet or "").lower()
     if any(marq in p for marq in ("nonprod", "non-prod", "stg", "staging",
@@ -1429,10 +1432,10 @@ def est_prod(projet):
 
 
 def est_prod_workload(projet, labels):
-    """Le label `environment` prime sur le nom du projet quand il existe.
+    """The `environment` label wins over the project name when it exists.
 
-    Sur le parc actuel les deux concordent partout ; le label reste plus sur,
-    un projet pouvant heberger plusieurs environnements.
+    On the current fleet both agree everywhere; the label is still safer,
+    since a project can host several environments.
     """
     env = (labels.get("environment") or "").strip().lower()
     if env:
@@ -1441,7 +1444,7 @@ def est_prod_workload(projet, labels):
 
 
 def lien_workload(d):
-    """URL Cloud Console du workload lui-meme."""
+    """Cloud Console URL of the workload itself."""
     proj, nom, loc = d.get("proj"), d.get("wl"), d.get("loc") or ""
     if not proj or not nom:
         return ""
@@ -1457,10 +1460,10 @@ def lien_workload(d):
 
 
 def lien_config(d):
-    """URL de la page qui montre la reference d'image reellement deployee.
+    """URL of the page that shows the image reference actually deployed.
 
-    Cloud Run : l'onglet Revisions, qui affiche le conteneur de chaque
-    revision. GKE : l'onglet YAML du pod, ou figure l'image du conteneur.
+    Cloud Run: the Revisions tab, which shows the container of each
+    revision. GKE: the pod's YAML tab, where the container image appears.
     """
     proj, nom, loc = d.get("proj"), d.get("wl"), d.get("loc") or ""
     if not proj or not nom:
@@ -1477,7 +1480,7 @@ def lien_config(d):
 
 
 def reference_courte(ref, dig):
-    """Nom d'image lisible : chemin complet sans le digest en entier."""
+    """Readable image name: full path without the whole digest."""
     base = (ref or "").split("@", 1)[0]
     if base:
         return base
@@ -1485,10 +1488,10 @@ def reference_courte(ref, dig):
 
 
 def registre_de(ref):
-    """Projet Artifact Registry (ou hote) d'une reference d'image."""
+    """Artifact Registry project (or host) of an image reference."""
     ref = (ref or "").split("@", 1)[0]
     if not ref or ref.startswith("sha256:"):
-        return "GKE, image sans nom dans l'inventaire"
+        return "GKE, unnamed image in the inventory"
     hote, _, reste = ref.partition("/")
     if hote.endswith("-docker.pkg.dev") and reste:
         return reste.split("/", 1)[0]
@@ -1496,7 +1499,7 @@ def registre_de(ref):
 
 
 def non_couverts(deploiements, couverts, exportes):
-    """Images en service sur lesquelles SCC n'a jamais rien remonte."""
+    """Images in service on which SCC never reported anything."""
     par_reg = {}
     for d in deploiements:
         dig = d.get("dig") or ""
@@ -1518,7 +1521,7 @@ def non_couverts(deploiements, couverts, exportes):
 
 
 def clause_deploye(digests):
-    """Predicat SQL isolant les findings des images en cours d'execution."""
+    """SQL predicate isolating the findings of the images currently running."""
     surs = sorted(d for d in digests if RE_DIGEST.match(d or ""))
     if not surs:
         return "FALSE"
@@ -1528,16 +1531,16 @@ def clause_deploye(digests):
 
 
 # --------------------------------------------------------------------------
-# Assemblage
+# Assembly
 # --------------------------------------------------------------------------
 
 def construire_deploiements(placements, live, lus, tags, cai_date):
-    """Un enregistrement par emplacement d'execution reel.
+    """One record per real runtime placement.
 
-    Cloud Run est decrit par la sonde en direct quand elle a repondu pour le
-    projet ; sinon on retombe sur l'inventaire, et on le dit.
+    Cloud Run is described by the live probe when it answered for the
+    project; otherwise we fall back on the inventory, and say so.
     """
-    par_service = {}          # labels et localisation connus de l'inventaire
+    par_service = {}          # labels and location known from the inventory
     deploiements = []
 
     for p in placements:
@@ -1581,8 +1584,8 @@ def construire_deploiements(placements, live, lus, tags, cai_date):
                 "ver": e.get("ver") or version_de(e.get("ref") or "")
                        or tags.get(dig, ""),
                 "part": e.get("part") or 0,
-                # Une revision plus recente existe mais ne recoit pas le
-                # trafic : le correctif est publie, pas mis en service.
+                # A more recent revision exists but receives no traffic:
+                # the fix is published, not put into service.
                 "retard": bool(e.get("retard")),
                 "epingle": bool(e.get("epingle")),
                 "recente": e.get("recente") or "",
@@ -1592,10 +1595,11 @@ def construire_deploiements(placements, live, lus, tags, cai_date):
                 "src": "live", "date": "",
             })
 
-    # Services Cloud Run absents de la sonde. Si le projet a bien ete lu,
-    # c'est que le service n'existe plus : le garder recreerait le faux
-    # positif qu'on cherche a eliminer. On ne retombe sur l'inventaire que
-    # pour les projets illisibles, et on compte les disparus pour le dire.
+    # Cloud Run services missing from the probe. If the project was read,
+    # the service no longer exists: keeping it would recreate the false
+    # positive we are trying to eliminate. We only fall back on the
+    # inventory for unreadable projects, and count the vanished ones to
+    # say so.
     disparus = 0
     for (proj, svc), entrees in par_service.items():
         if (proj, svc) in vus:
@@ -1621,11 +1625,11 @@ def construire_deploiements(placements, live, lus, tags, cai_date):
 
 
 def construire_donnees(periode=PERIODE_DEFAUT):
-    """Lance les deux phases et assemble le payload."""
+    """Runs both phases and assembles the payload."""
     debut = time.time()
     clause = clause_periode(periode)
 
-    # Phase 1 : inventaire, metadonnees, et sonde Cloud Run en direct.
+    # Phase 1: inventory, metadata, and live Cloud Run probe.
     with ThreadPoolExecutor(max_workers=8) as pool:
         f_projets = pool.submit(lancer_bq, REQ_PROJETS_CR)
         f_jeton = pool.submit(jeton_acces)
@@ -1650,7 +1654,7 @@ def construire_donnees(periode=PERIODE_DEFAUT):
         base["placements"], live, lus, tags, cai_date)
     digests = {d["dig"] for d in deploiements if d.get("dig")}
 
-    # Phase 2 : les findings, restreints a ce qui tourne pour de vrai.
+    # Phase 2: the findings, restricted to what really runs.
     dep_sql = clause_deploye(digests)
     resultats, erreurs = {}, {}
 
@@ -1675,7 +1679,7 @@ def construire_donnees(periode=PERIODE_DEFAUT):
     if erreurs:
         raise ErreurBQ("; ".join(f"[{k}] {v}" for k, v in erreurs.items()))
 
-    # On ne renvoie au navigateur que les emplacements d'une image vulnerable.
+    # Only the placements of a vulnerable image are sent to the browser.
     vulnerables = {l["dig"] for l in resultats["worklist"] if l.get("dig")}
     retires = {l["dig"]: l["nb"] for l in resultats["retires"] if l.get("dig")}
     details = findings_by_digest(resultats["findings"])
@@ -1685,16 +1689,16 @@ def construire_donnees(periode=PERIODE_DEFAUT):
     for d in workloads:
         par_dig.setdefault(d["dig"], []).append(d)
 
-    # Sous quel nom Artifact Registry publie aujourd'hui chacun de ces
-    # digests. Le tag reclame par le deploiement sert de premier candidat.
+    # Under which name Artifact Registry publishes each of these digests
+    # today. The tag the deployment asks for is the first candidate.
     chemins = {}
     for dig, ws in par_dig.items():
         chemin = next((w["nom"] for w in ws if w.get("nom")), "")
         if chemin:
             chemins.setdefault(chemin, set()).add(dig)
 
-    # Ce que le registre publie pour ces images, et ce que SCC a trouve sur
-    # chaque digest : de quoi dire si une version posterieure fait mieux.
+    # What the registry publishes for these images, and what SCC found on
+    # each digest: enough to tell whether a later version does better.
     inventaire = inventaire_versions(chemins, jeton)
     severites = {l["dig"]: (l["c"], l["h"]) for l in base["severites"]
                  if l.get("dig")}
@@ -1714,19 +1718,19 @@ def construire_donnees(periode=PERIODE_DEFAUT):
             "chemin": chemin,
             "tag": next((w["ver"] for w in ws if w.get("ver")), ""),
         }
-        # la revision plus recente porte une autre image : la nommer aussi,
-        # c'est elle qu'il faudra mettre en service
+        # the more recent revision carries another image: name it too,
+        # it is the one that must be put into service
         for w in ws:
             if w.get("recente_dig") and w["recente_dig"] not in cibles:
                 cibles[w["recente_dig"]] = {"chemin": chemin,
                                             "tag": w.get("reclamee") or ""}
-        # et la version moins vulnerable, pour pouvoir la nommer aussi
+        # and the less vulnerable version, so it can be named too
         if dig in meilleures and meilleures[dig]["dig"] not in cibles:
             cibles[meilleures[dig]["dig"]] = {
                 "chemin": chemin, "tag": meilleures[dig].get("ver") or ""}
     vivants = resoudre_versions(cibles, jeton)
 
-    # un digest enfant n'est pas tague : c'est son index parent qui l'est
+    # a child digest is not tagged: its parent index is
     for dig, m in meilleures.items():
         if not m.get("ver"):
             noms = vivants.get(m["dig"]) or []
@@ -1735,12 +1739,13 @@ def construire_donnees(periode=PERIODE_DEFAUT):
     for d in workloads:
         dig = d.get("dig") or ""
         publiees = vivants.get(dig, [])
-        reclamee = d.get("ver") or ""          # tag fige dans le gabarit
+        reclamee = d.get("ver") or ""          # tag frozen in the template
         d["ar"] = publiees
         d["ver"] = publiees[0] if publiees else (reclamee or tags.get(dig, ""))
         d["reclamee"] = reclamee
-        # Le service reclame un tag qui ne designe plus ce conteneur : une
-        # image a ete republiee sans que la revision soit redeployee.
+        # The service asks for a tag that no longer points to this
+        # container: an image was republished without the revision being
+        # redeployed.
         d["derive"] = bool(reclamee and publiees and reclamee not in publiees)
         attente = vivants.get(d.get("recente_dig") or "", [])
         d["recente_ver"] = attente[0] if attente else reclamee
@@ -1779,9 +1784,9 @@ def construire_donnees(periode=PERIODE_DEFAUT):
                    else "CLOUD_RUN_REVISION" if runtimes == {"CLOUD_RUN_REVISION"}
                    else "MIXTE" if runtimes else ""),
             "tags": l.get("tags") or "NO_TAG_FOUND",
-            # Le lien du registre pointe sur le digest exact, et non sur le
-            # paquet : la page du paquet ouvre la derniere version publiee,
-            # qui n'est pas celle qui tourne.
+            # The registry link points to the exact digest, not to the
+            # package: the package page opens the latest published version,
+            # which is not the one running.
             "url": lien_registre(chemin, dig) or l.get("url") or "",
             "ver": (publiees[0] if publiees
                     else next((w["reclamee"] for w in ws if w.get("reclamee")), "")
@@ -1813,8 +1818,8 @@ def construire_donnees(periode=PERIODE_DEFAUT):
                                  (l.get("ver") or "").casefold(),
                                  l.get("dig") or ""))
 
-    # Repartition par runtime, recomptee sur les emplacements reels : les
-    # champs agreges de la vue concatenent des chaines et perdent le detail.
+    # Breakdown per runtime, recounted on the real placements: the view's
+    # aggregated fields concatenate strings and lose the detail.
     par_runtime = {}
     for w in workloads:
         e = par_runtime.setdefault(w["rt"], {"wl": set(), "img": set()})
@@ -1857,7 +1862,7 @@ def construire_donnees(periode=PERIODE_DEFAUT):
                            for k, v in sorted(err_live.items())],
             "retires": sum(retires.values()),
             "img_retires": len(retires),
-            # images en service dont SCC a TOUT retire : la vue SCC les ignore
+            # images in service from which SCC retired EVERYTHING: the SCC view ignores them
             "img_retires_seuls": sum(1 for l in worklist
                                      if l["ret"] and l["ret"] >= l["c"] + l["h"]),
             "non_couverts": non_couverts(
@@ -1879,7 +1884,7 @@ def construire_donnees(periode=PERIODE_DEFAUT):
 # Cache
 # --------------------------------------------------------------------------
 
-_cache = {}          # periode -> {"donnees":..., "ts":...}
+_cache = {}          # period -> {"donnees":..., "ts":...}
 _verrou = threading.Lock()
 
 
@@ -2018,15 +2023,15 @@ def rows_to_csv(rows):
 
 
 # --------------------------------------------------------------------------
-# Rendu
+# Rendering
 # --------------------------------------------------------------------------
 
 def page_erreur(message):
     msg = (message.replace("&", "&amp;").replace("<", "&lt;")
                   .replace(">", "&gt;"))
-    return f"""<!doctype html><html lang="fr"><head><meta charset="utf-8">
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Erreur BigQuery</title><style>
+<title>BigQuery error</title><style>
 body{{margin:0;background:#F2F4F0;color:#171A1B;font:14px/1.6 "Segoe UI",system-ui,sans-serif;
 display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}}
 .b{{max-width:660px;background:#fff;border:1px solid #DEE2DB;border-left:3px solid #C4362C;
@@ -2038,15 +2043,15 @@ ul{{padding-left:20px;color:#414A4C}} li{{margin:5px 0}}
 code{{background:#FAFBF8;border:1px solid #EBEEE8;padding:1px 5px;border-radius:2px;font-size:12px}}
 a{{color:#0E7BAE}}
 </style></head><body><div class="b">
-<h1>BigQuery n'a pas repondu</h1>
+<h1>BigQuery did not answer</h1>
 <pre>{msg}</pre>
-<p>Pistes a verifier :</p>
+<p>Things to check:</p>
 <ul>
-<li>Authentification expiree : <code>gcloud auth login</code></li>
-<li>La CLI <code>bq</code> n'est pas dans le PATH de ce terminal</li>
-<li>Droits de lecture retires sur <code>{DATASET}</code></li>
+<li>Expired authentication: <code>gcloud auth login</code></li>
+<li>The <code>bq</code> CLI is not on this terminal's PATH</li>
+<li>Read permissions removed on <code>{DATASET}</code></li>
 </ul>
-<p><a href="/?refresh=1">Reessayer</a></p>
+<p><a href="/?refresh=1">Retry</a></p>
 </div></body></html>"""
 
 
@@ -2076,8 +2081,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(donnees)
         except (ConnectionAbortedError, ConnectionResetError,
                 BrokenPipeError):
-            # Le navigateur a ferme ou recharge l'onglet pendant les ~40 s
-            # de calcul : il n'y a plus personne a qui repondre.
+            # The browser closed or reloaded the tab during the ~40 s of
+            # computation: there is nobody left to answer.
             self.close_connection = True
 
     def _send_table(self, params, forcer, periode):
@@ -2241,13 +2246,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
         try:
             if forcer:
-                print("  Interrogation de BigQuery et de Cloud Run...")
+                print("  Querying BigQuery and Cloud Run...")
             donnees, cache = obtenir_donnees(forcer, periode)
             if not cache:
                 m = donnees["meta"]
                 print(f"  [{m['periode_nom']}] {len(donnees['worklist'])} "
-                      f"images en execution · {m['cr_services']} services "
-                      f"Cloud Run verifies ({m['duree']} s)")
+                      f"running images · {m['cr_services']} Cloud Run "
+                      f"services checked ({m['duree']} s)")
                 for e in m["cr_erreurs"]:
                     print(f"    ! Cloud Run {e['proj']} : {e['msg']}")
             self._envoyer(rendre(donnees, cache))
@@ -2255,7 +2260,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._envoyer(page_erreur(str(exc)), 500)
         except FileNotFoundError:
             self._envoyer(page_erreur(
-                f"Template introuvable : {TEMPLATE}"), 500)
+                f"Template not found: {TEMPLATE}"), 500)
 
 
 class Serveur(socketserver.ThreadingTCPServer):
@@ -2268,10 +2273,10 @@ class ServeurV6(Serveur):
 
 
 def ip_locale():
-    """Adresse de cette machine sur le reseau local, ou chaine vide."""
+    """Address of this machine on the local network, or an empty string."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        s.connect(("8.8.8.8", 80))   # aucun paquet n'est emis
+        s.connect(("8.8.8.8", 80))   # no packet is sent
         return s.getsockname()[0]
     except OSError:
         return ""
@@ -2280,20 +2285,20 @@ def ip_locale():
 
 
 def ouvrir_serveurs(port, lan=False):
-    """Ecoute locale par defaut ; sur tout le reseau si lan=True.
+    """Listens locally by default; on the whole network if lan=True.
 
-    Sous Windows `localhost` resout ::1 avant 127.0.0.1 : un serveur IPv4
-    seul fait patienter ~2 s le temps que le navigateur bascule. On sert
-    donc aussi ::1 en mode local.
+    On Windows `localhost` resolves ::1 before 127.0.0.1: an IPv4-only server
+    makes the browser wait ~2 s before it falls back. So ::1 is served too
+    in local mode.
     """
     if lan:
         return Serveur(("0.0.0.0", port), Handler), []
-    principal = Serveur(("127.0.0.1", port), Handler)  # doit reussir
+    principal = Serveur(("127.0.0.1", port), Handler)  # must succeed
     secondaires = []
     try:
         secondaires.append(ServeurV6(("::1", port), Handler))
     except OSError:
-        pass  # pas d'IPv6 sur cette machine : 127.0.0.1 suffit
+        pass  # no IPv6 on this machine: 127.0.0.1 is enough
     for srv in secondaires:
         threading.Thread(target=srv.serve_forever, daemon=True).start()
     return principal, secondaires
@@ -2307,48 +2312,48 @@ def lire_arguments(argv):
         elif arg.isdigit():
             port = int(arg)
         else:
-            print(f"  Argument ignore : {arg}")
+            print(f"  Ignored argument: {arg}")
     return port, lan
 
 
 def main():
     if not os.path.exists(TEMPLATE):
-        print(f"ERREUR : {TEMPLATE} est introuvable.")
+        print(f"ERROR: {TEMPLATE} not found.")
         sys.exit(1)
 
     port, lan = lire_arguments(sys.argv)
     url = f"http://127.0.0.1:{port}/"
     print()
-    print("  Console de triage des vulnerabilites")
-    print(f"  Projet : {PROJET}  ({LOCATION})")
+    print("  Vulnerability triage console")
+    print(f"  Project: {PROJET}  ({LOCATION})")
     print(f"  -> {url}")
     if lan:
         ip = ip_locale()
         if ip:
-            print(f"  -> http://{ip}:{port}/   (depuis un autre appareil "
-                  f"du meme Wi-Fi)")
-        print("  ATTENTION : en mode --lan l'app n'a aucune authentification.")
-        print("  Toute machine du reseau peut la lire. A n'utiliser que sur")
-        print("  un reseau de confiance, et a couper apres usage.")
-        print("  Si le telephone n'y accede pas, ouvrir le port une fois :")
+            print(f"  -> http://{ip}:{port}/   (from another device "
+                  f"on the same Wi-Fi)")
+        print("  WARNING: in --lan mode the app has no authentication.")
+        print("  Any machine on the network can read it. Only use it on")
+        print("  a trusted network, and stop it after use.")
+        print("  If the phone cannot reach it, open the port once:")
         print(f'    netsh advfirewall firewall add rule '
-              f'name="Console vulnerabilites {port}" dir=in action=allow '
+              f'name="Vulnerability console {port}" dir=in action=allow '
               f'protocol=TCP localport={port}')
-    print("  Ctrl+C pour arreter.")
+    print("  Ctrl+C to stop.")
     print()
 
     try:
         serveur, secondaires = ouvrir_serveurs(port, lan)
     except OSError as exc:
-        print(f"  Impossible d'ouvrir le port {port} : {exc}")
-        print(f"  Essayez : python app.py {port + 1}")
+        print(f"  Could not open port {port}: {exc}")
+        print(f"  Try: python app.py {port + 1}")
         sys.exit(1)
 
     threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:
         serveur.serve_forever()
     except KeyboardInterrupt:
-        print("\n  Arret.")
+        print("\n  Stopped.")
         serveur.shutdown()
         for srv in secondaires:
             srv.shutdown()

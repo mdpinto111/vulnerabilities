@@ -1,14 +1,14 @@
-# Instantanés de données réelles — NE PAS VERSIONNER.
-# Ces fichiers contiennent la cartographie des vulnérabilités non corrigées
-# (CVE critiques, workloads de production, projets, emails de responsables).
-# Les publier reviendrait à diffuser une feuille de route d'attaque.
+# Snapshots of real data — DO NOT COMMIT.
+# These files contain the map of unpatched vulnerabilities
+# (critical CVEs, production workloads, projects, owners' e-mails).
+# Publishing them would amount to handing out an attack roadmap.
 dashboard.html
 dashboard_data.json
 deployed_worklist.json
 scans/
 mails_cloudrun_*
 
-# Sorties de travail
+# Working outputs
 _*.json
 _*.js
 _*.py
@@ -20,14 +20,14 @@ __pycache__/
 .venv/
 venv/
 
-# Outillage d'agent - ne doit jamais partir dans le depot.
+# Agent tooling - must never end up in the repository.
 CLAUDE.md
 .claude/
 .cursor/
 .aider*
 .github/copilot*
 
-# Éditeurs / OS
+# Editors / OS
 .vscode/
 .idea/
 Thumbs.db

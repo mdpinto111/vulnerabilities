@@ -1,6 +1,6 @@
 @echo off
-REM Console de triage des vulnerabilites - lanceur Windows
-REM Double-cliquez sur ce fichier pour demarrer l'application.
+REM Vulnerability triage console - Windows launcher
+REM Double-click this file to start the application.
 
 cd /d "%~dp0"
 
@@ -13,6 +13,6 @@ if %errorlevel%==0 (
 
 if %errorlevel% neq 0 (
     echo.
-    echo L'application s'est arretee avec une erreur.
+    echo The application stopped with an error.
     pause
 )

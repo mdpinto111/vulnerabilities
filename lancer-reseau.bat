@@ -1,7 +1,7 @@
 @echo off
-REM Console de triage des vulnerabilites - acces depuis le telephone.
-REM Ouvre l'application sur le reseau local (meme Wi-Fi). Aucun mot de passe :
-REM a n'utiliser que sur un reseau de confiance, et a fermer apres usage.
+REM Vulnerability triage console - access from a phone.
+REM Opens the application on the local network (same Wi-Fi). No password:
+REM only use it on a trusted network, and close it after use.
 
 cd /d "%~dp0"
 
@@ -14,6 +14,6 @@ if %errorlevel%==0 (
 
 if %errorlevel% neq 0 (
     echo.
-    echo L'application s'est arretee avec une erreur.
+    echo The application stopped with an error.
     pause
 )

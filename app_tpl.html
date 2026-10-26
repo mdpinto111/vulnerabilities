@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Triage Vulnérabilités — my-gcp-project</title>
+<title>Vulnerability Triage — my-gcp-project</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap">
@@ -132,7 +132,7 @@ button.clr{font-family:var(--sans);font-size:12px;padding:8px 12px;border-radius
   border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;white-space:nowrap}
 button.clr:hover{border-color:var(--ink-2)}
 mark{background:color-mix(in srgb,var(--high) 26%,transparent);color:inherit;border-radius:2px;padding:0 1px}
-/* bandeau de periode active */
+/* active period banner */
 #pernotice,#srcnotice{margin-top:20px;padding:13px 17px;border:1px solid var(--line);
   border-left:3px solid var(--high);border-radius:4px;background:var(--surface);
   font-size:13px;color:var(--ink-2);line-height:1.55}
@@ -174,7 +174,7 @@ td.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;
 .tagd{font-size:10.5px;color:var(--muted);font-family:var(--mono)}
 .cn{color:var(--crit);font-weight:600} .hn{color:var(--high)}
 .zero{color:var(--muted);opacity:.45}
-/* ligne depliable + detail des workloads */
+/* expandable row + workload details */
 tr.main{cursor:pointer}
 tr.main:focus-visible{outline:2px solid var(--high);outline-offset:-2px}
 /* project names visible without expanding the row; production in red */
@@ -199,7 +199,7 @@ tr.detail>td{background:var(--surface-2);padding:0 12px 14px;border-bottom:1px s
 .wrow a:hover{border-bottom-color:var(--high)}
 .wtag{font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:2px;background:var(--high-soft);color:var(--high);white-space:nowrap}
 .wtag.none{background:transparent;color:var(--muted);opacity:.6;padding-left:0}
-/* reference d'image reellement en execution */
+/* image reference actually running */
 .imgref{font-family:var(--mono);font-size:10.5px;color:var(--ink-2);word-break:break-all;line-height:1.5;margin-top:2px}
 .imgref .dg{color:var(--muted)}
 .wfoot{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:2px}
@@ -226,7 +226,7 @@ tr.detail>td{background:var(--surface-2);padding:0 12px 14px;border-bottom:1px s
   border:1px solid color-mix(in srgb,var(--high) 40%,var(--line));background:var(--high-soft);
   color:var(--high);white-space:nowrap;margin-left:5px}
 .newer b{font-weight:600}
-/* labels du workload */
+/* workload labels */
 .labs{display:flex;flex-wrap:wrap;gap:4px}
 .lab{display:inline-flex;align-items:baseline;gap:4px;font-family:var(--mono);font-size:10px;
   padding:1px 6px;border-radius:2px;border:1px solid var(--line);background:var(--surface-2);
@@ -240,9 +240,8 @@ tr.detail>td{background:var(--surface-2);padding:0 12px 14px;border-bottom:1px s
 .nolab{font-size:10.5px;color:var(--muted);opacity:.7;font-style:italic}
 a.ar{color:var(--high);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--high) 35%,transparent)}
 a.ar:hover{border-bottom-color:var(--high)}
-/* lecture sur telephone : le tableau ne tient pas en 390 px. On masque les
-   colonnes que le detail deplie redonne de toute facon, plutot que d'imposer
-   un defilement horizontal. */
+/* phone reading: the table does not fit in 390 px. Hide the columns the
+   expanded detail shows anyway, rather than forcing horizontal scrolling. */
 @media(max-width:680px){
   .wrap{padding-left:14px;padding-right:14px}
   table{min-width:0;font-size:12.5px}
@@ -294,11 +293,11 @@ footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:v
       <span id="qtime"></span>
     </div>
     <div class="barctl">
-      <label class="perlab" for="periode">Dernier signalement</label>
+      <label class="perlab" for="periode">Last reported</label>
       <select id="periode" class="per"></select>
       <button class="rf" id="refresh">
         <span class="spin" aria-hidden="true"></span>
-        <span id="rflabel">Rafraîchir</span>
+        <span id="rflabel">Refresh</span>
       </button>
     </div>
   </div>
@@ -308,10 +307,10 @@ footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:v
 <header>
   <div>
     <div class="eyebrow">my-gcp-project &middot; Artifact Registry</div>
-    <h1>Triage des vulnérabilités</h1>
-    <p>Ce que Security Command Center a trouvé sur vos images, trié par une seule question&nbsp;: l'image tourne-t-elle vraiment quelque part&nbsp;?</p>
+    <h1>Vulnerability triage</h1>
+    <p>What Security Command Center found on your images, sorted by a single question: is the image really running somewhere?</p>
   </div>
-  <div class="scan">Dernier finding&nbsp;: <span id="scan"></span></div>
+  <div class="scan">Last finding: <span id="scan"></span></div>
 </header>
 
 <div id="pernotice" hidden></div>
@@ -319,51 +318,51 @@ footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:v
 
 <div class="verdict">
   <div class="vcard act">
-    <div class="eyebrow" style="color:var(--crit)">À traiter</div>
+    <div class="eyebrow" style="color:var(--crit)">To fix</div>
     <div class="vnum" id="v-dep">—</div>
-    <div class="vlabel">vulnérabilités sur des images en cours d'exécution</div>
-    <div class="vsub">Réparties sur <span id="v-img">—</span> images et <span id="v-wl">—</span> workloads Cloud&nbsp;Run et GKE. C'est le seul périmètre réellement exposé.</div>
+    <div class="vlabel">vulnerabilities on running images</div>
+    <div class="vsub">Spread over <span id="v-img">—</span> images and <span id="v-wl">—</span> Cloud&nbsp;Run and GKE workloads. This is the only scope really exposed.</div>
     <div class="vsplit">
-      <div><b class="sev-c" id="v-dc">—</b>critiques</div>
-      <div><b class="sev-h" id="v-dh">—</b>élevées</div>
-      <div><b id="v-dfix">—</b>avec correctif publié</div>
+      <div><b class="sev-c" id="v-dc">—</b>critical</div>
+      <div><b class="sev-h" id="v-dh">—</b>high</div>
+      <div><b id="v-dfix">—</b>with a published fix</div>
     </div>
   </div>
   <div class="vcard wait">
-    <div class="eyebrow">Sans exposition</div>
+    <div class="eyebrow">Not exposed</div>
     <div class="vnum" id="v-nodep">—</div>
-    <div class="vlabel">sur des images stockées mais non déployées</div>
-    <div class="vsub">Anciens builds et images intermédiaires. À nettoyer par une politique de rétention, pas en urgence.</div>
+    <div class="vlabel">on images stored but not deployed</div>
+    <div class="vsub">Old builds and intermediate images. To clean up with a retention policy, not urgently.</div>
     <div class="vsplit">
-      <div><b id="v-ndc">—</b>critiques</div>
-      <div><b id="v-ndh">—</b>élevées</div>
-      <div><b id="v-ndfix">—</b>avec correctif publié</div>
+      <div><b id="v-ndc">—</b>critical</div>
+      <div><b id="v-ndh">—</b>high</div>
+      <div><b id="v-ndfix">—</b>with a published fix</div>
     </div>
   </div>
 </div>
 
 <div class="kpis">
-  <div class="kpi"><b id="k1">—</b><span>images déployées à corriger</span></div>
-  <div class="kpi"><b id="k2" class="cn">—</b><span>dont images portant au moins une faille critique</span></div>
-  <div class="kpi"><b id="k3">—</b><span>corrigeables par simple mise à jour de paquet</span></div>
-  <div class="kpi"><b id="k4" class="cn">—</b><span id="k4l">workloads en production concernés</span></div>
+  <div class="kpi"><b id="k1">—</b><span>deployed images to fix</span></div>
+  <div class="kpi"><b id="k2" class="cn">—</b><span>of which images carrying at least one critical flaw</span></div>
+  <div class="kpi"><b id="k3">—</b><span>fixable by a simple package update</span></div>
+  <div class="kpi"><b id="k4" class="cn">—</b><span id="k4l">production workloads affected</span></div>
 </div>
 
 <section>
   <div class="shead">
-    <h2>Le levier principal</h2>
-    <p>Vulnérabilités corrigeables sur images déployées, regroupées par paquet. Reconstruire sur une base à jour règle plusieurs centaines de findings d'un coup.</p>
+    <h2>The main lever</h2>
+    <p>Fixable vulnerabilities on deployed images, grouped by package. Rebuilding on an up-to-date base clears several hundred findings at once.</p>
   </div>
   <div class="grid2">
     <div class="panel">
       <div class="legend">
-        <span class="lg"><span class="sw" style="background:var(--crit)"></span>Critique</span>
-        <span class="lg"><span class="sw" style="background:var(--high)"></span>Élevée</span>
+        <span class="lg"><span class="sw" style="background:var(--crit)"></span>Critical</span>
+        <span class="lg"><span class="sw" style="background:var(--high)"></span>High</span>
       </div>
       <div class="bars" id="bars"></div>
     </div>
     <div class="panel">
-      <div class="eyebrow" style="margin-bottom:11px">CVE critiques les plus répandues</div>
+      <div class="eyebrow" style="margin-bottom:11px">Most widespread critical CVEs</div>
       <div class="bars" id="cvebars"></div>
     </div>
   </div>
@@ -371,13 +370,13 @@ footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:v
 
 <section>
   <div class="shead">
-    <h2>Rythme des découvertes</h2>
-    <p>Nouvelles vulnérabilités détectées chaque jour, tous dépôts confondus — le flux entrant que la remédiation doit absorber.</p>
+    <h2>Discovery rate</h2>
+    <p>New vulnerabilities detected each day, across all repositories — the incoming flow remediation has to absorb.</p>
   </div>
   <div class="panel">
     <div class="legend">
-      <span class="lg"><span class="sw" style="background:var(--crit)"></span>Critiques</span>
-      <span class="lg" style="color:var(--high)"><span class="sw d"></span><span style="color:var(--ink-2)">Élevées</span></span>
+      <span class="lg"><span class="sw" style="background:var(--crit)"></span>Critical</span>
+      <span class="lg" style="color:var(--high)"><span class="sw d"></span><span style="color:var(--ink-2)">High</span></span>
     </div>
     <div class="chartbox"><div id="trend"></div><div class="tip" id="tip"></div></div>
   </div>
@@ -385,33 +384,33 @@ footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:v
 
 <section>
   <div class="shead">
-    <h2>Plan de travail <span id="perbadge" hidden></span></h2>
-    <p>Une ligne par image déployée, par ordre alphabétique. Chaque ligne est un rebuild à planifier.</p>
+    <h2>Work plan <span id="perbadge" hidden></span></h2>
+    <p>One row per deployed image, in alphabetical order. Each row is a rebuild to plan.</p>
   </div>
   <div class="searchrow">
     <input id="q" type="search" autocomplete="off" spellcheck="false"
-           placeholder="Rechercher une image, un projet, un workload, un label (ex. owner_email, fileupload-prod, openssl)…"
-           aria-label="Rechercher dans le plan de travail">
-    <button class="clr" id="qclear" hidden aria-label="Effacer la recherche">Effacer</button>
+           placeholder="Search an image, a project, a workload, a label (e.g. owner_email, fileupload-prod, openssl)…"
+           aria-label="Search the work plan">
+    <button class="clr" id="qclear" hidden aria-label="Clear the search">Clear</button>
   </div>
   <div class="filters">
     <label>Runtime</label>
-    <button class="f" data-rt="all" aria-pressed="true">Tout</button>
+    <button class="f" data-rt="all" aria-pressed="true">All</button>
     <button class="f" data-rt="CLOUD_RUN_REVISION" aria-pressed="false">Cloud Run</button>
     <button class="f" data-rt="GKE_POD" aria-pressed="false">GKE</button>
-    <label style="margin-left:10px">Filtre</label>
-    <button class="f" data-only="crit" aria-pressed="false">Critiques seulement</button>
-    <button class="f" data-only="prod" aria-pressed="false">Production seulement</button>
-    <button class="f" data-only="maj" aria-pressed="false" id="fmaj" hidden>Version plus saine disponible</button>
+    <label style="margin-left:10px">Filter</label>
+    <button class="f" data-only="crit" aria-pressed="false">Critical only</button>
+    <button class="f" data-only="prod" aria-pressed="false">Production only</button>
+    <button class="f" data-only="maj" aria-pressed="false" id="fmaj" hidden>Cleaner version available</button>
     <label style="margin-left:10px" for="fdev">Dev</label>
     <select id="fdev" class="per"></select>
   </div>
-  <p style="color:var(--muted);font-size:12px;margin:-4px 0 10px">Cliquez une ligne pour voir où l'image tourne&nbsp;: projets, workloads, labels et liens console.</p>
+  <p style="color:var(--muted);font-size:12px;margin:-4px 0 10px">Click a row to see where the image runs: projects, workloads, labels and console links.</p>
   <div class="tscroll">
     <table>
       <thead><tr>
-        <th>Image en exécution &amp; version</th><th>Runtime</th><th>Déploiements</th>
-        <th class="n">Crit.</th><th class="n">Élev.</th><th class="n">CVE</th><th class="n">Corrigeables</th><th>Registry</th>
+        <th>Running image &amp; version</th><th>Runtime</th><th>Deployments</th>
+        <th class="n">Crit.</th><th class="n">High</th><th class="n">CVE</th><th class="n">Fixable</th><th>Registry</th>
       </tr></thead>
       <tbody id="tb"></tbody>
     </table>
@@ -421,7 +420,7 @@ footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:v
 
 <footer>
   <span>Security Command Center &middot; BigQuery <span class="mono">scc_findings</span> &middot; me-west1<br>
-  Seules les sévérités <b>CRITICAL</b> et <b>HIGH</b> sont exportées vers BigQuery&nbsp;: les compteurs d'Artifact Registry, qui incluent Medium et Low, sont plus élevés.</span>
+  Only <b>CRITICAL</b> and <b>HIGH</b> severities are exported to BigQuery: Artifact Registry's counters, which include Medium and Low, are higher.</span>
   <span class="mono" id="foot"></span>
 </footer>
 </div>
@@ -430,26 +429,26 @@ footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:v
 var D = __DATA__;
 var ETAT = "__ETAT__";
 function $(s){return document.querySelector(s);}
-function nf(n){return (n||0).toLocaleString('fr-FR');}
+function nf(n){return (n||0).toLocaleString('en-US');}
 function esc0(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function sum(f,g){return D.matrice.filter(g).reduce(function(a,r){return a+(r[f]||0);},0);}
 
-/* --- barre d'etat --- */
+/* --- status bar --- */
 $('#freshness').textContent = ETAT === 'cache'
-  ? 'donnees en cache (' + D.meta.recupere_a + ')'
-  : 'donnees fraiches (' + D.meta.recupere_a + ')';
+  ? 'cached data (' + D.meta.recupere_a + ')'
+  : 'fresh data (' + D.meta.recupere_a + ')';
 if (ETAT === 'cache') $('#dot').classList.add('cached');
-$('#qtime').textContent = D.meta.duree + ' s de requetes';
+$('#qtime').textContent = D.meta.duree + ' s of queries';
 var PER = (D.meta.periode || 'all');
 function allerVers(periode, forcer){
   var b = $('#refresh');
   b.disabled = true;
-  $('#rflabel').textContent = 'Interrogation de BigQuery...';
+  $('#rflabel').textContent = 'Querying BigQuery...';
   location.href = '/?p=' + encodeURIComponent(periode) + (forcer?'&refresh=1':'');
 }
 $('#refresh').addEventListener('click', function(){ allerVers(PER, true); });
 
-/* Selecteur de periode : chaque choix relance les requetes cote serveur. */
+/* Period selector: each choice reruns the queries on the server side. */
 (function(){
   var sel = $('#periode');
   sel.innerHTML = (D.meta.periodes||[]).map(function(p){
@@ -458,7 +457,7 @@ $('#refresh').addEventListener('click', function(){ allerVers(PER, true); });
   sel.addEventListener('change', function(){ allerVers(sel.value, false); });
 })();
 
-/* --- bandeau de periode --- */
+/* --- period banner --- */
 (function(){
   if(PER==='all') return;
   var n = $('#pernotice'), nom = D.meta.periode_nom || PER;
@@ -466,27 +465,27 @@ $('#refresh').addEventListener('click', function(){ allerVers(PER, true); });
   n.hidden = false;
   if(total===0){
     n.className = 'rien';
-    n.innerHTML = '<b>Aucune vulnérabilité signalée sur « '+esc0(nom)+' ».</b> '
-      + 'Cela ne veut pas dire que le parc est sain : SCC ne réémet ses findings '
-      + 'que par vagues. Repassez sur <b>Tout</b> pour l\'état réel du parc.';
+    n.innerHTML = '<b>No vulnerability reported over "'+esc0(nom)+'".</b> '
+      + 'This does not mean the fleet is clean: SCC only re-emits its findings '
+      + 'in waves. Switch back to <b>All</b> for the real state of the fleet.';
   } else {
     n.className = '';
-    n.innerHTML = 'Chiffres restreints aux vulnérabilités <b>signalées sur « '
-      + esc0(nom) + ' »</b> — soit '+total.toLocaleString('fr-FR')+' findings sur '
-      + 'l\'ensemble du parc. Le graphique des découvertes reste sur 30 jours.';
+    n.innerHTML = 'Figures restricted to vulnerabilities <b>reported over "'
+      + esc0(nom) + '"</b> — that is '+total.toLocaleString('en-US')+' findings across '
+      + 'the whole fleet. The discovery chart stays on 30 days.';
   }
 })();
 
-/* Rappel de la periode au niveau du tableau : les chiffres par image en
-   dependent, et le bandeau du haut est hors de vue quand on y arrive. */
+/* Period reminder at table level: the per-image figures depend on it, and
+   the top banner is out of view by the time you get there. */
 (function(){
   if(PER==='all') return;
   var b = $('#perbadge');
   b.hidden = false;
-  b.textContent = 'signalé sur ' + (D.meta.periode_nom || PER);
+  b.textContent = 'reported over ' + (D.meta.periode_nom || PER);
 })();
 
-/* --- d'ou viennent les chiffres : chaque source n'a pas la meme fraicheur --- */
+/* --- where the figures come from: each source has its own freshness --- */
 (function(){
   var n = $('#srcnotice'), m = D.meta, err = m.cr_erreurs || [];
   var nc = m.non_couverts || [],
@@ -498,34 +497,34 @@ $('#refresh').addEventListener('click', function(){ allerVers(PER, true); });
           + esc0(r.reg) + '</span>&nbsp;(' + r.img + ')';}).join(', ');};
   n.hidden = false;
   if(err.length) n.className = 'alerte';
-  n.innerHTML = '<b>Périmètre vérifié en direct.</b> Les '
-    + m.cr_services + ' services Cloud Run de ' + m.cr_projets + ' projets ont '
-    + 'été relus sur l\'API Cloud Run : chaque ligne porte la révision qui sert '
-    + 'le trafic et l\'image exacte qu\'elle exécute. Les révisions retirées — '
-    + 'la grande majorité de l\'inventaire — sont exclues.<br>'
-    + 'Le volet <b>GKE</b> repose encore sur l\'export Cloud Asset Inventory, '
-    + 'arrêté au <span class="mono">' + esc0(m.cai_date) + '</span>&nbsp;: un pod '
-    + 'redéployé depuis n\'y figure pas.'
+  n.innerHTML = '<b>Scope checked live.</b> The '
+    + m.cr_services + ' Cloud Run services of ' + m.cr_projets + ' projects were '
+    + 're-read from the Cloud Run API: each row carries the revision serving '
+    + 'traffic and the exact image it runs. Retired revisions — '
+    + 'the vast majority of the inventory — are excluded.<br>'
+    + 'The <b>GKE</b> part still relies on the Cloud Asset Inventory export, '
+    + 'as of <span class="mono">' + esc0(m.cai_date) + '</span>: a pod '
+    + 'redeployed since is not in it.'
     + (m.cr_disparus ? ' <b>' + m.cr_disparus + ' service' + (m.cr_disparus>1?'s':'')
-        + "</b> que l'inventaire liste encore n'existe" + (m.cr_disparus>1?"nt":"")
-        + ' plus dans Cloud Run&nbsp;: leurs images ne sont plus comptées.' : '')
-    + (err.length ? '<br><b>Cloud Run illisible sur ' + err.length + ' projet'
-        + (err.length>1?'s':'') + '</b> — repli sur l\'inventaire pour '
+        + "</b> still listed by the inventory " + (m.cr_disparus>1?"no longer exist":"no longer exists")
+        + ' in Cloud Run: their images are no longer counted.' : '')
+    + (err.length ? '<br><b>Cloud Run unreadable on ' + err.length + ' project'
+        + (err.length>1?'s':'') + '</b> — falling back on the inventory for '
         + err.map(function(e){return esc0(e.proj);}).join(', ') : '')
-    + (m.retires ? '<br><b>' + nf(m.retires) + ' Critical/High comptées bien que SCC les '
-        + 'marque INACTIVE</b>, sur ' + m.img_retires + ' image' + (m.img_retires>1?'s':'')
-        + ' en service' + (m.img_retires_seuls ? ' (dont ' + m.img_retires_seuls
-            + ' que SCC ne signale plus du tout)' : '')
-        + '. La console Artifact Registry en affiche toujours la quasi-totalité&nbsp;: c\'est elle que '
-        + 'ce tableau suit, au prix d\'une légère surestimation possible des High (contrôle du 06/10&nbsp;: '
-        + 'Critical exacts, 5 High sur 118 en trop sur une image). Badge <span class="vtag none">hors SCC</span> sur les lignes concernées.' : '')
+    + (m.retires ? '<br><b>' + nf(m.retires) + ' Critical/High counted although SCC '
+        + 'marks them INACTIVE</b>, on ' + m.img_retires + ' image' + (m.img_retires>1?'s':'')
+        + ' in service' + (m.img_retires_seuls ? ' (of which ' + m.img_retires_seuls
+            + ' that SCC no longer reports at all)' : '')
+        + '. The Artifact Registry console still shows almost all of them: it is the one '
+        + 'this dashboard follows, at the cost of a possible slight overestimate of High (check of 10/06: '
+        + 'Critical exact, 5 High out of 118 too many on one image). Badge <span class="vtag none">out of SCC</span> on the rows concerned.' : '')
     + (ncOut.length ? '<br><b>' + nf(sumImg(ncOut)) + ' image' + (sumImg(ncOut)>1?'s':'')
-        + ' en service hors du périmètre SCC exporté</b>&nbsp;: leur registre n\'alimente '
-        + 'pas la table des findings, on ne sait rien de leurs failles. '
+        + ' in service outside the exported SCC scope</b>: their registry does not feed '
+        + 'the findings table, nothing is known about their flaws. '
         + regs(ncOut) + '.' : '')
     + (ncIn.length ? '<br>' + nf(sumImg(ncIn)) + ' image' + (sumImg(ncIn)>1?'s':'')
-        + ' en service dans un registre exporté sans aucune faille remontée '
-        + '(image saine, ou jamais analysée)&nbsp;: ' + regs(ncIn) + '.' : '');
+        + ' in service in an exported registry with no flaw reported '
+        + '(clean image, or never analyzed): ' + regs(ncIn) + '.' : '');
 })();
 
 /* --- verdict --- */
@@ -555,14 +554,14 @@ $('#k3').textContent = nf(sum('fix',dep));
   var n = Object.keys(prod).length, np = Object.keys(projs).length;
   $('#k4').textContent = n;
   $('#k4l').textContent = n
-    ? 'workloads en production concernés, dans ' + np + ' projet' + (np>1?'s':'')
-    : 'aucun workload de production concerné';
+    ? 'production workloads affected, in ' + np + ' project' + (np>1?'s':'')
+    : 'no production workload affected';
   if(!n) $('#k4').classList.remove('cn');
 })();
-$('#foot').textContent = nf(D.meta.images_totales)+' images scannees · '
-  + nf(D.meta.lignes_brutes)+' findings bruts · depuis '+D.meta.date_min;
+$('#foot').textContent = nf(D.meta.images_totales)+' images scanned · '
+  + nf(D.meta.lignes_brutes)+' raw findings · since '+D.meta.date_min;
 
-/* --- barres horizontales --- */
+/* --- horizontal bars --- */
 function drawBars(el, rows, max, fmt){
   el.innerHTML = rows.map(function(r){
     var wc = max? r.c/max*100 : 0, wh = max? r.h/max*100 : 0;
@@ -579,10 +578,10 @@ drawBars($('#bars'), pk, Math.max.apply(null,pk.map(function(p){return p.c+p.h;}
 var cv = D.cves.slice(0,9).map(function(c){return {label:c.id.replace('CVE-',''),c:c.img,h:0};});
 drawBars($('#cvebars'), cv, Math.max.apply(null,cv.map(function(c){return c.c;}).concat([1])), function(r){return r.c+' img';});
 
-/* --- courbe de tendance --- */
+/* --- trend curve --- */
 (function(){
   var data = D.tendance.map(function(d){return {j:d.j,c:d.c,h:d.h,t:Date.parse(d.j)};});
-  if(!data.length){ $('#trend').innerHTML='<p style="color:var(--muted);font-size:13px">Aucune donnee sur 30 jours.</p>'; return; }
+  if(!data.length){ $('#trend').innerHTML='<p style="color:var(--muted);font-size:13px">No data over 30 days.</p>'; return; }
   var W=760,H=250,M={t:20,r:14,b:30,l:46};
   var iw=W-M.l-M.r, ih=H-M.t-M.b;
   var ts=data.map(function(d){return d.t;});
@@ -601,11 +600,11 @@ drawBars($('#cvebars'), cv, Math.max.apply(null,cv.map(function(c){return c.c;})
   [0,Math.floor(data.length*0.25),Math.floor(data.length*0.5),Math.floor(data.length*0.75),data.length-1]
    .filter(function(v,i,a){return a.indexOf(v)===i;})
    .forEach(function(i){var d=data[i];if(!d)return;
-    var lbl=new Date(d.t).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+    var lbl=new Date(d.t).toLocaleDateString('en-US',{day:'numeric',month:'short'});
     xt+='<text x="'+X(d.t)+'" y="'+(H-M.b+18)+'" text-anchor="middle" font-size="10.5" font-family="IBM Plex Mono,monospace" fill="var(--muted)">'+lbl+'</text>';});
   var area='M'+X(data[0].t)+' '+Y(0)+' '+data.map(function(d){return 'L'+X(d.t).toFixed(1)+' '+Y(d.c).toFixed(1);}).join(' ')+' L'+X(data[data.length-1].t)+' '+Y(0)+' Z';
   var peak=data.reduce(function(a,b){return b.c>a.c?b:a;});
-  $('#trend').innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Nouvelles vulnerabilites par jour sur 30 jours">'
+  $('#trend').innerHTML='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="New vulnerabilities per day over 30 days">'
     +ticks+xt
     +'<path d="'+area+'" fill="var(--crit)" opacity=".09"/>'
     +'<path d="'+path('h')+'" fill="none" stroke="var(--high)" stroke-width="2" stroke-dasharray="5 3" stroke-linejoin="round"/>'
@@ -622,9 +621,9 @@ drawBars($('#cvebars'), cv, Math.max.apply(null,cv.map(function(c){return c.c;})
     data.forEach(function(d){var dd=Math.abs(X(d.t)-sx);if(dd<bd){bd=dd;best=d;}});
     ch.setAttribute('x1',X(best.t));ch.setAttribute('x2',X(best.t));ch.setAttribute('opacity','.3');
     tip.style.opacity=1;
-    tip.innerHTML='<b>'+new Date(best.t).toLocaleDateString('fr-FR',{day:'numeric',month:'long'})+'</b>'
-      +'<div class="r"><span style="color:var(--crit)">Critiques</span><span>'+best.c+'</span></div>'
-      +'<div class="r"><span style="color:var(--high)">Elevees</span><span>'+best.h+'</span></div>';
+    tip.innerHTML='<b>'+new Date(best.t).toLocaleDateString('en-US',{day:'numeric',month:'long'})+'</b>'
+      +'<div class="r"><span style="color:var(--crit)">Critical</span><span>'+best.c+'</span></div>'
+      +'<div class="r"><span style="color:var(--high)">High</span><span>'+best.h+'</span></div>';
     var px=X(best.t)/W*b.width;
     tip.style.left=Math.min(Math.max(px-65,0),Math.max(b.width-145,0))+'px';
     tip.style.top='6px';
@@ -632,14 +631,14 @@ drawBars($('#cvebars'), cv, Math.max.apply(null,cv.map(function(c){return c.c;})
   svg.addEventListener('pointerleave',function(){tip.style.opacity=0;ch.setAttribute('opacity',0);});
 })();
 
-/* --- plan de travail --- */
+/* --- work plan --- */
 var fRt='all', fCrit=false, fProd=false, fMaj=false, fQ='', fDev='';
 /* Same person, several spellings: "alice <alice@x.com>" and "alice" are
    grouped on the name part, case-insensitive. */
 function devCle(n){return String(n||'').split('<')[0].replace(/\s+/g,' ').trim().toLowerCase();}
 function devDe(r){var d=r.dev||{}; return d.etat==='inconnu' ? '' : devCle(d.nom);}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-/* surligne les termes cherches dans un texte deja echappe */
+/* highlights the searched terms in an already escaped text */
 function surli(txt){
   var t = esc(txt);
   if(!fQ) return t;
@@ -655,49 +654,49 @@ function rtPill(v){
   return '<span class="pill cr">Cloud Run</span>';
 }
 
-/* Les workloads arrivent a plat : on les indexe par digest, car c'est le
-   digest qui tourne — deux versions d'une meme image peuvent coexister. */
+/* Workloads arrive flat: index them by digest, since the digest is what
+   runs — two versions of the same image can coexist. */
 var PAR_IMAGE = {};
 (D.workloads||[]).forEach(function(w){
   (PAR_IMAGE[w.dig] = PAR_IMAGE[w.dig] || []).push(w);
 });
 function wlDe(r){return PAR_IMAGE[r.dig] || [];}
 function digCourt(d){return d ? d.slice(0,19) + '…' : '';}
-/* Reference exacte de ce qui tourne : nom complet, version, digest.
-   Deux versions peuvent differer : celle que le deploiement demande, et le
-   tag qu'Artifact Registry porte aujourd'hui sur ce digest — un rebuild
-   publie sous le meme numero deplace le tag sans toucher au conteneur. */
+/* Exact reference of what runs: full name, version, digest.
+   Two versions can differ: the one the deployment asks for, and the tag
+   Artifact Registry carries on this digest today — a rebuild published
+   under the same number moves the tag without touching the container. */
 function refHTML(w){
   var ver = w.ver || '';
   var titre = (w.ar && w.ar.length)
-    ? "version sous laquelle Artifact Registry publie ce digest aujourd'hui"
-    : "tag demandé par le déploiement, non confirmé par le registre";
+    ? "version under which Artifact Registry publishes this digest today"
+    : "tag asked for by the deployment, not confirmed by the registry";
   return '<div class="imgref">' + surli(w.nom || w.img || '')
     + (ver ? '<b class="vtag" style="margin-left:5px" title="' + esc(titre) + '">:'
              + surli(ver) + '</b>' : '')
     + driftHTML(w)
     + '<br><span class="dg">' + surli(digCourt(w.dig)) + '</span></div>';
 }
-/* Deux écarts distincts, à ne pas confondre :
-   - retard : une révision plus récente existe et ne reçoit aucun trafic.
-     Le correctif est publié mais pas en service. C'est le cas actionnable.
-   - derive : le gabarit réclame un tag que le registre n'associe plus à ce
-     conteneur, sans qu'une révision plus récente soit en cause. */
+/* Two distinct gaps, not to be confused:
+   - retard (lag): a more recent revision exists and receives no traffic.
+     The fix is published but not in service. This is the actionable case.
+   - derive (drift): the template asks for a tag the registry no longer
+     associates with this container, with no more recent revision involved. */
 function driftHTML(w){
   if(w.retard){
-    var t = "Le trafic est servi à 100 % par une révision antérieure. La "
-      + "révision " + w.recente + (w.recente_ver ? " (:" + w.recente_ver + ")" : "")
-      + " est déployée mais ne reçoit rien : la console affiche son image, "
-      + "alors que le conteneur en service est un autre.";
-    return '<span class="drift" title="' + esc(t) + '">révision <b>'
+    var t = "Traffic is served 100 % by an earlier revision. Revision "
+      + w.recente + (w.recente_ver ? " (:" + w.recente_ver + ")" : "")
+      + " is deployed but receives nothing: the console shows its image, "
+      + "while the container in service is another one.";
+    return '<span class="drift" title="' + esc(t) + '">revision <b>'
       + surli(w.recente_ver ? ':' + w.recente_ver : w.recente)
-      + '</b> prête, sans trafic</span>';
+      + '</b> ready, no traffic</span>';
   }
   if(w.derive){
-    var d = "Le gabarit du service demande :" + w.reclamee + ", mais le registre "
-      + "n'associe plus ce tag à ce conteneur.";
-    return '<span class="drift" title="' + esc(d) + '">gabarit <b>:'
-      + surli(w.reclamee) + '</b>, non confirmé</span>';
+    var d = "The service template asks for :" + w.reclamee + ", but the registry "
+      + "no longer associates this tag with this container.";
+    return '<span class="drift" title="' + esc(d) + '">template <b>:'
+      + surli(w.reclamee) + '</b>, not confirmed</span>';
   }
   return '';
 }
@@ -706,11 +705,11 @@ D.worklist.forEach(function(r){
   r._n = ws.length;
   r._prod = ws.some(function(w){return w.prod;});
   r._projs = ws.reduce(function(a,w){if(a.indexOf(w.proj)<0)a.push(w.proj);return a;},[]);
-  /* index de recherche : tout ce qui identifie l'image, sa version et ses
-     deploiements — on cherche donc aussi par version et par revision */
+  /* search index: everything that identifies the image, its version and its
+     deployments — so search also matches on version and revision */
   var mots = [r.img, r.repo, r.tags, r.ver, r.reclamee, r.recente, r.recente_ver, r.nom, r.dig,
                (r.depot||{}).url, (r.dev||{}).nom,
-              r.mieux ? 'maj ' + (r.mieux.ver || '') : '',
+              r.mieux ? 'upgrade ' + (r.mieux.ver || '') : '',
               (r.ar||[]).join(' '), r.rt==='GKE_POD'?'gke':'cloud run',
               r.pkgs||'', r.cves_l||''];
   ws.forEach(function(w){
@@ -725,7 +724,7 @@ D.worklist.forEach(function(r){
    the findings of all versions, so a CVE shared by two versions counts once. */
 function nomImage(r){return String(r.img||'').split('/').pop();}
 function cmpVer(a,b){   /* newest-looking version first */
-  return String(b.ver||'').localeCompare(String(a.ver||''), 'fr', {numeric:true, sensitivity:'base'});
+  return String(b.ver||'').localeCompare(String(a.ver||''), 'en', {numeric:true, sensitivity:'base'});
 }
 var GROUPES = (function(){
   var par = {}, ordre = [];
@@ -774,33 +773,34 @@ var GROUPES = (function(){
   });
 })();
 
-/* Detail : un bloc par projet, workloads cliquables avec leur tag. */
-/* Depot de code et responsable, chacun avec son niveau de certitude :
-   sur (rien), suppose (mention entre parentheses), inconnu (dit tel quel). */
+/* Detail: one block per project, clickable workloads with their tag. */
+/* Code repository and owner, each with its certainty level:
+   sur/certain (nothing), suppose/assumed (note in parentheses),
+   inconnu/unknown (said as is). */
 function provHTML(r){
   var dp = r.depot || {etat:'inconnu'}, dv = r.dev || {etat:'inconnu'};
-  /* pas de depot trouve : on n'ecrit rien plutot qu'un lien invente */
+  /* no repository found: write nothing rather than a made-up link */
   var depot = dp.etat === 'inconnu' ? ''
     : '<b>Code&nbsp;:</b> <a href="' + esc(dp.url) + '" target="_blank" rel="noopener" title="' + esc(dp.source) + '">'
         + surli(dp.url) + '</a>'
-      + (dp.etat === 'suppose' ? ' <span class="sup" title="' + esc(dp.source) + '">(supposé)</span>' : '')
+      + (dp.etat === 'suppose' ? ' <span class="sup" title="' + esc(dp.source) + '">(assumed)</span>' : '')
       + (dp.commit ? ' <span class="mono" title="commit">@' + esc(dp.commit.slice(0, 10)) + '</span>' : '')
       + '<br>';
   var dev = dv.etat === 'inconnu'
-    ? '<span class="inc">responsable inconnu</span>'
+    ? '<span class="inc">unknown owner</span>'
     : '<span title="' + esc(dv.source) + '">' + surli(dv.nom) + '</span>'
-      + (dv.etat === 'suppose' ? ' <span class="sup" title="' + esc(dv.source) + '">(supposé)</span>' : '');
+      + (dv.etat === 'suppose' ? ' <span class="sup" title="' + esc(dv.source) + '">(assumed)</span>' : '');
   return '<div class="prov">' + depot + '<b>Dev&nbsp;:</b> ' + dev + '</div>';
 }
 
 function detailHTML(r){
   var ws = wlDe(r);
   if(!ws.length) return '<p style="color:var(--muted);font-size:12px;margin:10px 0 0">'
-    + 'Aucun workload trouve dans l\'inventaire runtime pour cette image.</p>';
+    + 'No workload found in the runtime inventory for this image.</p>';
   var groupes = {};
   ws.forEach(function(w){ (groupes[w.proj] = groupes[w.proj] || []).push(w); });
-  /* un projet peut heberger plusieurs environnements : PROD des qu'un
-     seul de ses workloads en est */
+  /* a project can host several environments: PROD as soon as a single
+     one of its workloads is */
   var estProd = function(g){return g.some(function(w){return w.prod;});};
   var noms = Object.keys(groupes).sort(function(a,b){
     var pa = estProd(groupes[a]) ? 0:1, pb = estProd(groupes[b]) ? 0:1;
@@ -817,7 +817,7 @@ function detailHTML(r){
       +'<div class="projmeta">'+(g[0].rt==='GKE_POD'?'GKE':'Cloud Run')+' · '+esc(meta)+'</div>'
       +'<div class="wlist">'+g.map(function(w){
         var labs = w.labels || {}, cles = Object.keys(labs).sort(function(a,b){
-          if(a==='environment') return -1;      /* l'environnement d'abord */
+          if(a==='environment') return -1;      /* environment first */
           if(b==='environment') return 1;
           return a.localeCompare(b);
         });
@@ -831,27 +831,27 @@ function detailHTML(r){
           +(w.url?'<a href="'+esc(w.url)+'" target="_blank" rel="noopener">'+surli(w.wl)+'</a>'
                  :'<span class="projname">'+surli(w.wl)+'</span>')
           +'<span class="wsrc'+(w.src==='live'?' live':'')+'" title="'
-          +(w.src==='live'?"lu en direct sur l'API Cloud Run"
-                          :'inventaire Cloud Asset du '+esc(w.date||'?'))+'">'
-          +(w.src==='live'?'en direct':'inventaire')+'</span>'
+          +(w.src==='live'?"read live from the Cloud Run API"
+                          :'Cloud Asset inventory of '+esc(w.date||'?'))+'">'
+          +(w.src==='live'?'live':'inventory')+'</span>'
           +(w.part!=null && w.part<100 && w.part>0
-              ?'<span class="wtag">'+w.part+' % du trafic</span>':'')
+              ?'<span class="wtag">'+w.part+' % of traffic</span>':'')
           +'</div>'
-          /* ce que le workload execute vraiment : nom complet + version + digest */
+          /* what the workload really runs: full name + version + digest */
           +refHTML(w)
-          /* et, quand il differe, ce que la console Cloud Run affiche :
-             l'image du gabarit, qui ne sert qu'a fabriquer la prochaine
-             revision et ne tourne donc pas forcement */
+          /* and, when it differs, what the Cloud Run console shows: the
+             template's image, which is only used to build the next
+             revision and so does not necessarily run */
           +gabaritHTML(w)
           +'<div class="wfoot">'
-          +(w.rev?'<span class="wtag">'+(estCR?'révision ':'pod ')+surli(w.rev)+'</span>':'')
+          +(w.rev?'<span class="wtag">'+(estCR?'revision ':'pod ')+surli(w.rev)+'</span>':'')
           +(w.cfg?'<a class="wcfg" href="'+esc(w.cfg)+'" target="_blank" rel="noopener">'
-                  +(estCR?'config Cloud Run':'YAML du pod')+' &#8599;</a>':'')
+                  +(estCR?'Cloud Run config':'pod YAML')+' &#8599;</a>':'')
           +(w.registre?'<a class="wcfg" href="'+esc(w.registre)+'" target="_blank" rel="noopener">'
-                  +'image dans le registre &#8599;</a>':'')
+                  +'image in the registry &#8599;</a>':'')
           +'</div>'
           +(chips?'<div class="labs">'+chips+'</div>'
-                 :'<div class="nolab">aucun label metier</div>')
+                 :'<div class="nolab">no business label</div>')
           +'</div>';
       }).join('')+'</div></div>';
   }).join('') + '</div>';
@@ -867,23 +867,23 @@ function findingsHTML(r){
   var lib = fs.filter(function(f){return f.ptype!=='OS' && f.fixv;}).length;
   var none = fs.filter(function(f){return !f.fixv;}).length;
   var sum = '<summary class="fsum"><b>' + fs.length + ' finding' + (fs.length>1?'s':'')
-    + ' Google</b> (Critical/High, notation GCP)'
-    + (os ? ' · <b>' + os + '</b> paquet' + (os>1?'s':'') + ' OS corrigé' + (os>1?'s':'') + ' en amont (<span class="mono">apk upgrade</span> / rebuild)' : '')
-    + (lib ? ' · <b>' + lib + '</b> dépendance' + (lib>1?'s':'') + ' applicative' + (lib>1?'s':'') + ' à monter' : '')
-    + (none ? ' · <b>' + none + '</b> sans correctif' : '') + '</summary>';
+    + ' Google</b> (Critical/High, GCP rating)'
+    + (os ? ' · <b>' + os + '</b> OS package' + (os>1?'s':'') + ' fixed upstream (<span class="mono">apk upgrade</span> / rebuild)' : '')
+    + (lib ? ' · <b>' + lib + '</b> application dependenc' + (lib>1?'ies':'y') + ' to bump' : '')
+    + (none ? ' · <b>' + none + '</b> without a fix' : '') + '</summary>';
   var rows = fs.map(function(f){
     var s = f.sev==='CRITICAL' ? 'c' : 'h';
-    return '<tr' + (f.retire ? ' class="ret" title="INACTIVE dans SCC, toujours affiché par Artifact Registry"' : '') + '>'
+    return '<tr' + (f.retire ? ' class="ret" title="INACTIVE in SCC, still shown by Artifact Registry"' : '') + '>'
       + '<td><span class="sev ' + s + '">' + (s==='c'?'CRIT':'HIGH') + '</span></td>'
       + '<td class="mono">' + (f.cvss!=null ? f.cvss.toFixed(1) : '—') + '</td>'
       + '<td class="mono">' + surli(f.cve) + '</td>'
       + '<td>' + surli(f.pkg) + ' <span class="sup">' + esc((f.ptype||'').toLowerCase()) + '</span></td>'
       + '<td class="mono">' + esc(f.inst) + '</td>'
-      + (f.fixv ? '<td class="mono fx">' + esc(f.fixv) + '</td>' : '<td class="nofix">aucun</td>')
+      + (f.fixv ? '<td class="mono fx">' + esc(f.fixv) + '</td>' : '<td class="nofix">none</td>')
       + '</tr>';
   }).join('');
   return '<details class="fwrap">' + sum + '<table class="ftab"><thead><tr>'
-    + '<th>Gravité</th><th>CVSS</th><th>CVE</th><th>Paquet</th><th>Installé</th><th>Corrigé en</th>'
+    + '<th>Severity</th><th>CVSS</th><th>CVE</th><th>Package</th><th>Installed</th><th>Fixed in</th>'
     + '</tr></thead><tbody>' + rows + '</tbody></table></details>';
 }
 
@@ -892,16 +892,16 @@ function findingsHTML(r){
 function versionHTML(r){
   return '<div class="vblock"><div class="vhead">'
     + (r.ver ? '<b class="vtag">:' + surli(r.ver) + '</b>'
-             : '<span class="vtag none">version non étiquetée</span>')
+             : '<span class="vtag none">untagged version</span>')
     + driftHTML(r) + gainHTML(r)
-    + (r.ret ? ' <span class="vtag none" title="' + r.ret + ' des Critical/High de cette version sont '
-        + 'marquées INACTIVE dans SCC mais toujours affichées par Artifact Registry.">'
-        + (r.ret===r.c+r.h ? 'hors SCC' : r.ret + ' hors SCC') + '</span>' : '')
+    + (r.ret ? ' <span class="vtag none" title="' + r.ret + ' of the Critical/High of this version are '
+        + 'marked INACTIVE in SCC but still shown by Artifact Registry.">'
+        + (r.ret===r.c+r.h ? 'out of SCC' : r.ret + ' out of SCC') + '</span>' : '')
     + ' <span class="mono vcnt"><span class="' + (r.c?'cn':'zero') + '">' + r.c + 'C</span> / '
     + '<span class="' + (r.h?'hn':'zero') + '">' + r.h + 'H</span> · ' + r.cve + ' CVE · '
-    + r.fix + ' corrigeables</span>'
+    + r.fix + ' fixable</span>'
     + ' <span class="tagd">' + surli(digCourt(r.dig)) + '</span>'
-    + (r.url ? ' <a class="ar" href="' + esc(r.url) + '" target="_blank" rel="noopener">registre</a>' : '')
+    + (r.url ? ' <a class="ar" href="' + esc(r.url) + '" target="_blank" rel="noopener">registry</a>' : '')
     + '</div>'
     + findingsHTML(r) + detailHTML(r) + '</div>';
 }
@@ -910,34 +910,34 @@ function versionHTML(r){
    whether or not it is less vulnerable than the running one. */
 function latestHTML(r){
   var l = r.derniere;
-  if(!l) return '<div class="latest"><span class="lk">Dernière version publiée</span>'
-    + '<span class="inc">introuvable dans Artifact Registry</span></div>';
+  if(!l) return '<div class="latest"><span class="lk">Latest published version</span>'
+    + '<span class="inc">not found in Artifact Registry</span></div>';
   var autres = (l.tags||[]).filter(function(t){return t!==l.ver;});
   var sev = l.c==null
-    ? ' · <span class="inc" title="aucune Critical/High remontée par le scanner Google : image saine, ou pas encore analysée">vulnérabilités non trouvées</span>'
+    ? ' · <span class="inc" title="no Critical/High reported by the Google scanner: clean image, or not analyzed yet">no vulnerabilities found</span>'
     : ' · <b class="'+(l.c?'cn':'')+'">'+l.c+'C</b> / <b class="'+(l.h?'hn':'')+'">'+l.h+'H</b>';
   return '<div class="latest'+(l.en_service?' cur':'')+'">'
-    + '<span class="lk">Dernière version publiée</span>'
+    + '<span class="lk">Latest published version</span>'
     + '<b class="vtag">:'+surli(l.ver)+'</b>'
     + (autres.length ? ' <span class="mono" style="font-size:11px">('+esc(autres.join(', '))+')</span>' : '')
-    + ' · publiée le <span class="mono">'+esc(l.cree)+'</span>'
-    + (l.en_service ? ' · <span class="ok">c\'est celle en service</span>' : sev
+    + ' · published on <span class="mono">'+esc(l.cree)+'</span>'
+    + (l.en_service ? ' · <span class="ok">it is the one in service</span>' : sev
         + ' · <span class="mono" title="'+esc(l.dig)+'">'+esc(digCourt(l.dig))+'</span>')
     + '</div>';
 }
 
-/* Une version publiee apres celle en service, et que SCC trouve moins
-   vulnerable. Seules des images executables reellement analysees entrent ici :
-   un index ou une attestation afficherait un faux progres. */
+/* A version published after the one in service, and that SCC finds less
+   vulnerable. Only runnable images actually analyzed qualify here: an index
+   or an attestation would show fake progress. */
 function gainHTML(r){
   var m = r.mieux;
   if(!m) return '';
   var nom = m.ver ? ':' + m.ver : m.dig.slice(7, 19);
-  var t = "Publiée le " + m.cree + ", cette version porte " + m.c + " critique"
-    + (m.c > 1 ? "s" : "") + " et " + m.h + " élevée" + (m.h > 1 ? "s" : "")
-    + ", contre " + r.c + " et " + r.h + " pour celle en service.";
+  var t = "Published on " + m.cree + ", this version carries " + m.c + " critical"
+    + " and " + m.h + " high"
+    + ", versus " + r.c + " and " + r.h + " for the one in service.";
   return '<span class="gain" title="' + esc(t) + '">' + surli(nom)
-    + ' dispo&nbsp;: <b>' + m.c + 'C / ' + m.h + 'H</b></span>';
+    + ' available: <b>' + m.c + 'C / ' + m.h + 'H</b></span>';
 }
 
 /* The latest published version when it is not the one running, shown even
@@ -949,26 +949,26 @@ function newerHTML(r){
   if(r.mieux && r.mieux.ver && r.mieux.ver === l.ver) return '';
   var connu = l.c != null;
   var mieux = connu && (l.c < r.c || (l.c === r.c && l.h < r.h));
-  var t = 'Publiée le ' + l.cree + (connu
-    ? ', cette version porte ' + l.c + ' critique' + (l.c>1?'s':'') + ' et ' + l.h
-      + ' élevée' + (l.h>1?'s':'') + ', contre ' + r.c + ' et ' + r.h + ' pour '
-      + (r.ver ? ':' + r.ver : 'celle') + ' en service.'
-    : ". Le scanner Google ne remonte aucune vulnérabilité Critical/High dessus : "
-      + "image saine, ou pas encore analysée.");
+  var t = 'Published on ' + l.cree + (connu
+    ? ', this version carries ' + l.c + ' critical and ' + l.h
+      + ' high, versus ' + r.c + ' and ' + r.h + ' for '
+      + (r.ver ? ':' + r.ver : 'the one') + ' in service.'
+    : ". The Google scanner reports no Critical/High vulnerability on it: "
+      + "clean image, or not analyzed yet.");
   return '<span class="' + (mieux ? 'gain' : 'newer') + '" title="' + esc(t) + '">:'
-    + surli(l.ver) + ' publiée le ' + esc(l.cree.slice(0,10)) + '&nbsp;: <b>'
-    + (connu ? l.c + 'C / ' + l.h + 'H' : 'vulnérabilités non trouvées') + '</b></span>';
+    + surli(l.ver) + ' published on ' + esc(l.cree.slice(0,10)) + ': <b>'
+    + (connu ? l.c + 'C / ' + l.h + 'H' : 'no vulnerabilities found') + '</b></span>';
 }
 
-/* Cloud Run distingue le gabarit du service (« Container image URL » dans la
-   console) des revisions, figees sur un digest des leur creation. Les deux
-   divergent des qu'une revision anterieure garde le trafic. */
+/* Cloud Run tells the service template ("Container image URL" in the
+   console) apart from the revisions, frozen on a digest as soon as they are
+   created. The two diverge as soon as an earlier revision keeps the traffic. */
 function gabaritHTML(w){
   if(!w.retard || !w.reclamee) return '';
   return '<div class="gabarit">'
-    + '<span class="gk">gabarit du service</span> <span class="gv">:'
-    + surli(w.reclamee) + '</span> &rarr; révision ' + surli(w.recente)
-    + ', <b>0&nbsp;% du trafic</b></div>';
+    + '<span class="gk">service template</span> <span class="gv">:'
+    + surli(w.reclamee) + '</span> &rarr; revision ' + surli(w.recente)
+    + ', <b>0&nbsp;% of traffic</b></div>';
 }
 
 function render(){
@@ -979,15 +979,15 @@ function render(){
     if(fProd && !r._prod) return false;
     if(fMaj && !r.mieux) return false;
     if(fDev && (fDev==='__none__' ? devDe(r)!=='' : devDe(r)!==fDev)) return false;
-    /* tous les termes doivent matcher : "openssl prod" affine */
+    /* every term must match: "openssl prod" narrows down */
     return termes.every(function(m){return r._idx.indexOf(m)>=0;});
   });
 
   if(!rows.length){
     $('#tb').innerHTML='<tr><td colspan="8"><div class="vide">'
-      +'<b>Aucune image ne correspond</b>'
-      +(fQ?'Rien ne contient « '+esc(fQ)+' »'+((fCrit||fProd||fMaj||fDev||fRt!=='all')?' avec les filtres actifs.':'.')
-          :'Essayez d\'élargir les filtres ou la période.')
+      +'<b>No matching image</b>'
+      +(fQ?'Nothing contains "'+esc(fQ)+'"'+((fCrit||fProd||fMaj||fDev||fRt!=='all')?' with the active filters.':'.')
+          :'Try widening the filters or the period.')
       +'</div></td></tr>';
     $('#tcount').textContent='0 image';
     return;
@@ -1005,7 +1005,7 @@ function render(){
       var gain = v.mieux && enService.indexOf(v.mieux.ver)<0;
       if(gain) gains.push(v.mieux.ver);
       return '<span>'+(v.ver ? '<b class="vtag">:'+surli(v.ver)+'</b>'
-                             : '<span class="vtag none">non étiquetée</span>')
+                             : '<span class="vtag none">untagged</span>')
         +(v.retard ? driftHTML(v) : '')+(gain ? gainHTML(v) : '')+'</span>';
     }).join('');
     /* the latest published version, once per image */
@@ -1013,7 +1013,7 @@ function render(){
       ? newerHTML({derniere:r.derniere, c:vs[0].c, h:vs[0].h, ver:vs[0].ver}) : '';
     return '<tr class="main" data-i="'+i+'" tabindex="0" aria-expanded="false">'
       +'<td><div class="iname">'+surli(r.img)
-        +(seule ? '' : ' <span class="tagd">'+vs.length+' versions en service</span>')
+        +(seule ? '' : ' <span class="tagd">'+vs.length+' versions in service</span>')
         +'</div>'
       +'<div class="vlist">'+versions+'</div>'
       +(newer ? '<div class="vlist vnext">'+newer+'</div>' : '')+''
@@ -1021,7 +1021,7 @@ function render(){
       +provHTML(r)+'</td>'
       +'<td>'+rtPill(r.rt)+'</td>'
       +'<td><span class="tw"><span class="caret" aria-hidden="true"></span>'
-        +r._n+' workload'+(r._n>1?'s':'')+' · '+np+' projet'+(np>1?'s':'')+'</span>'
+        +r._n+' workload'+(r._n>1?'s':'')+' · '+np+' project'+(np>1?'s':'')+'</span>'
         +(r._prod?' <span class="prodbadge">PROD</span>':'')
         +'<div class="projlist">'+r._projs.map(function(p){
           var prod = vs.some(function(v){
@@ -1032,8 +1032,8 @@ function render(){
       +'<td class="n '+(r.h?'hn':'zero')+'">'+r.h+'</td>'
       +'<td class="n">'+r.cve+'</td><td class="n">'+r.fix+'</td>'
       +'<td>'+(seule && vs[0].url
-          ?'<a class="ar" href="'+esc(vs[0].url)+'" target="_blank" rel="noopener">ouvrir</a>'
-          :'<span class="zero">'+(seule?'—':'par version')+'</span>')+'</td>'
+          ?'<a class="ar" href="'+esc(vs[0].url)+'" target="_blank" rel="noopener">open</a>'
+          :'<span class="zero">'+(seule?'—':'per version')+'</span>')+'</td>'
       +'</tr>'
       +'<tr class="detail" data-d="'+i+'" hidden><td colspan="8">'+latestHTML(r)
       +vs.map(function(v){return versionHTML(v);}).join('')+'</td></tr>';
@@ -1048,7 +1048,7 @@ function render(){
   };
   Array.prototype.forEach.call($('#tb').querySelectorAll('tr.main'),function(tr){
     tr.addEventListener('click',function(e){
-      if(e.target.closest('a')) return;   /* laisser passer les liens */
+      if(e.target.closest('a')) return;   /* let links through */
       basculer(tr);
     });
     tr.addEventListener('keydown',function(e){
@@ -1062,13 +1062,13 @@ function render(){
       ptot=rows.reduce(function(a,r){r._projs.forEach(function(p){if(a.indexOf(p)<0)a.push(p);});return a;},[]).length;
   var nver=rows.reduce(function(a,r){return a+r.versions.length;},0);
   $('#tcount').textContent=rows.length+' image'+(rows.length>1?'s':'')
-    +' ('+nver+' version'+(nver>1?'s':'')+' en service)'
-    +(fQ?' correspondant à « '+fQ+' »':'')
-    +' · '+c+' critiques · '+h+' élevées · '+wtot+' workloads dans '
-    +ptot+' projet'+(ptot>1?'s':'')
-    +(rows.length<GROUPES.length?' (sur '+GROUPES.length+')':'');
+    +' ('+nver+' version'+(nver>1?'s':'')+' in service)'
+    +(fQ?' matching "'+fQ+'"':'')
+    +' · '+c+' critical · '+h+' high · '+wtot+' workloads in '
+    +ptot+' project'+(ptot>1?'s':'')
+    +(rows.length<GROUPES.length?' (out of '+GROUPES.length+')':'');
 }
-/* Recherche : filtrage instantane cote client, sans requete. */
+/* Search: instant client-side filtering, without a request. */
 (function(){
   var champ = $('#q'), clr = $('#qclear'), t = null;
   champ.addEventListener('input', function(){
@@ -1128,13 +1128,13 @@ $('#v-img').textContent = GROUPES.length;
     if(!g.nom || nom.length < g.nom.length) g.nom = nom;
   });
   var cles = Object.keys(groupes).sort(function(a,b){
-    return groupes[a].nom.localeCompare(groupes[b].nom, 'fr', {sensitivity:'base'});
+    return groupes[a].nom.localeCompare(groupes[b].nom, 'en', {sensitivity:'base'});
   });
-  sel.innerHTML = '<option value="">Tous</option>'
+  sel.innerHTML = '<option value="">All</option>'
     + cles.map(function(k){
         return '<option value="'+esc(k)+'">'+esc(groupes[k].nom)+' ('+groupes[k].n+')</option>';
       }).join('')
-    + (inconnus ? '<option value="__none__">Responsable inconnu ('+inconnus+')</option>' : '');
+    + (inconnus ? '<option value="__none__">Unknown owner ('+inconnus+')</option>' : '');
   sel.addEventListener('change', function(){ fDev = sel.value; render(); });
 })();
 
