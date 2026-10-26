@@ -902,6 +902,70 @@ def meilleure_version(dig, chemin, inventaire, severites):
             "ver": (versions[autre].get("tags") or [""])[0]}
 
 
+def derniere_version(chemin, inventaire):
+    """Most recent tagged version of an image in Artifact Registry.
+
+    Only tagged objects count: the per-platform children and attestations of
+    a multi-arch push carry no tag, the index that groups them does. Severity
+    counts are filled in later by gravites_derniere.
+    """
+    versions = inventaire.get(chemin) or {}
+    taguees = [(infos["cree"], dig, infos) for dig, infos in versions.items()
+               if infos.get("tags") and infos.get("cree")]
+    if not taguees:
+        return None
+    cree, dig, infos = max(taguees)
+    lisibles = [t for t in infos["tags"] if t != "latest"] or infos["tags"]
+    return {"dig": dig, "ver": lisibles[0], "tags": infos["tags"],
+            "cree": f"{cree[:10]} {cree[11:16]} UTC".strip(),
+            "index": not est_image_executable(infos),
+            "c": None, "h": None}
+
+
+# An index never changes: its amd64 child is resolved once per process.
+_enfants_index = {}
+
+
+def enfant_amd64(chemin, dig, jeton):
+    """Digest of the amd64 image an index points to, or ""."""
+    if dig in _enfants_index:
+        return _enfants_index[dig]
+    try:
+        man, _ = _registre_v2(chemin_image(chemin), f"manifests/{dig}", jeton)
+    except ErreurGcloud:
+        return ""          # not cached: retried on the next collection
+    enfants = man.get("manifests") or []
+    enfant = next((m for m in enfants
+                   if (m.get("platform") or {}).get("architecture") == "amd64"),
+                  enfants[0] if enfants else {})
+    _enfants_index[dig] = enfant.get("digest") or ""
+    return _enfants_index[dig]
+
+
+def gravites_derniere(dernieres, severites, jeton):
+    """Fill in the Critical/High counts of each latest version.
+
+    On an index SCC sees only a subset of the findings, which would read as
+    progress: the counts come from its amd64 child, the image that runs.
+    None means SCC reports nothing on it — clean, or not analysed yet.
+    """
+    indexes = {d["dig"]: chemin for chemin, d in dernieres.items()
+               if d and d["index"]}
+    enfants = {}
+    if indexes and jeton:
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            enfants = dict(pool.map(
+                lambda it: (it[0], enfant_amd64(it[1], it[0], jeton)),
+                indexes.items()))
+    for d in dernieres.values():
+        if not d:
+            continue
+        cible = enfants.get(d["dig"]) if d["index"] else d["dig"]
+        if cible in severites:
+            d["c"], d["h"] = severites[cible]
+            d["scanne"] = cible
+
+
 def lien_registre(chemin, dig):
     """Page Artifact Registry du digest exact, dans la Cloud Console."""
     pieces = _decomposer_ar(chemin)
@@ -1689,6 +1753,12 @@ def construire_donnees(periode=PERIODE_DEFAUT):
         {l.get("img", "").rsplit("/", 1)[-1] for l in resultats["worklist"]},
         jeton)
 
+    chemins_wl = {next((w["nom"] for w in par_dig.get(l.get("dig") or "", [])
+                        if w.get("nom")), l.get("img"))
+                  for l in resultats["worklist"]}
+    dernieres = {c: derniere_version(c, inventaire) for c in chemins_wl}
+    gravites_derniere(dernieres, severites, jeton)
+
     owners = declared_owners()
     worklist = []
     for l in resultats["worklist"]:
@@ -1697,6 +1767,12 @@ def construire_donnees(periode=PERIODE_DEFAUT):
         runtimes = {w["rt"] for w in ws}
         publiees = vivants.get(dig, [])
         chemin = next((w["nom"] for w in ws if w.get("nom")), l.get("img"))
+        latest = dict(dernieres[chemin]) if dernieres.get(chemin) else None
+        if latest:
+            # the running digest may be the child of the tagged index
+            latest["en_service"] = (latest["dig"] == dig
+                                    or latest.get("scanne") == dig
+                                    or bool(set(latest["tags"]) & set(publiees)))
         worklist.append({
             **l,
             "rt": ("GKE_POD" if runtimes == {"GKE_POD"}
@@ -1715,6 +1791,7 @@ def construire_donnees(periode=PERIODE_DEFAUT):
             "derive": any(w.get("derive") for w in ws),
             "retard": any(w.get("retard") for w in ws),
             "mieux": meilleures.get(dig),
+            "derniere": latest,
             "recente": next((w["recente"] for w in ws if w.get("retard")), ""),
             "recente_ver": next((w["recente_ver"] for w in ws
                                  if w.get("retard") and w.get("recente_ver")), ""),
@@ -1729,6 +1806,12 @@ def construire_donnees(periode=PERIODE_DEFAUT):
         })
         worklist[-1]["dev"] = apply_declared_owner(
             worklist[-1]["dev"], l.get("img", "").rsplit("/", 1)[-1], owners)
+
+    # Alphabetical by image name, then version: the UI and the table API keep
+    # this order whatever filter is applied.
+    worklist.sort(key=lambda l: ((l.get("img") or "").rsplit("/", 1)[-1].casefold(),
+                                 (l.get("ver") or "").casefold(),
+                                 l.get("dig") or ""))
 
     # Repartition par runtime, recomptee sur les emplacements reels : les
     # champs agreges de la vue concatenent des chaines et perdent le detail.
@@ -1833,7 +1916,8 @@ TABLE_COLUMNS = [
     "image", "image_path", "registry_repo", "version", "tags",
     "version_claimed", "tag_drift", "digest", "runtime",
     "critical", "high", "cves", "fixable", "out_of_scc",
-    "better_version", "better_critical", "better_high", "registry_url",
+    "better_version", "better_critical", "better_high",
+    "latest_version", "latest_published", "latest_is_running", "registry_url",
     "source_repo_url", "source_repo_status", "source_commit",
     "dev", "dev_status", "dev_source",
     "project", "prod", "environment", "location", "cluster", "namespace",
@@ -1843,13 +1927,19 @@ TABLE_COLUMNS = [
 ]
 
 
-def flat_rows(donnees, image=""):
+def dev_key(name):
+    """Grouping key of a dev: "alice <alice@x.com>" and "alice" are one."""
+    return " ".join((name or "").split("<", 1)[0].split()).lower()
+
+
+def flat_rows(donnees, image="", dev_filter=""):
     """Join worklist and workloads the way the UI does (by digest)."""
     by_digest = {}
     for w in donnees.get("workloads") or []:
         by_digest.setdefault(w.get("dig") or "", []).append(w)
 
     needle = image.strip().lower()
+    wanted_dev = dev_key(dev_filter)
     rows = []
     for r in donnees.get("worklist") or []:
         name = (r.get("img") or "").rsplit("/", 1)[-1]
@@ -1857,7 +1947,10 @@ def flat_rows(donnees, image=""):
             continue
         repo = r.get("depot") or {}
         dev = r.get("dev") or {}
+        if wanted_dev and dev_key(dev.get("nom")) != wanted_dev:
+            continue
         better = r.get("mieux") or {}
+        latest = r.get("derniere") or {}
         base = {
             "image": name,
             "image_path": r.get("nom") or "",
@@ -1876,6 +1969,9 @@ def flat_rows(donnees, image=""):
             "better_version": better.get("ver") or "",
             "better_critical": better.get("c", ""),
             "better_high": better.get("h", ""),
+            "latest_version": latest.get("ver") or "",
+            "latest_published": latest.get("cree") or "",
+            "latest_is_running": latest.get("en_service", ""),
             "registry_url": r.get("url") or "",
             # "sur" = certain, "suppose" = inferred, "inconnu" = unknown
             "source_repo_url": repo.get("url") or "",
@@ -1985,7 +2081,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.close_connection = True
 
     def _send_table(self, params, forcer, periode):
-        """GET /api/table?image=<name>&format=json|csv&cache=only
+        """GET /api/table?image=<name>&dev=<name>&format=json|csv&cache=only
+
+        dev= matches the name part only, case-insensitive: "alice" returns
+        both "alice" and "alice <alice@x.com>".
 
         cache=only never starts a collection: it serves the last payload,
         whatever its age, or 503 when nothing has been computed yet.
@@ -2007,7 +2106,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._envoyer(json.dumps({"error": str(exc)}), 500, jtype)
                 return
             _, ts = cached_data(periode)
-        rows = flat_rows(donnees, image)
+        rows = flat_rows(donnees, image, params.get("dev", [""])[0])
         if fmt == "csv":
             self._envoyer(rows_to_csv(rows), 200, "text/csv; charset=utf-8")
             return

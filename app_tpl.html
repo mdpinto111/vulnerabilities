@@ -177,6 +177,9 @@ td.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;
 /* ligne depliable + detail des workloads */
 tr.main{cursor:pointer}
 tr.main:focus-visible{outline:2px solid var(--high);outline-offset:-2px}
+/* project names visible without expanding the row; production in red */
+.projlist{display:flex;flex-direction:column;gap:1px;margin-top:5px;font-family:var(--mono);font-size:11px;color:var(--ink-2);word-break:break-all;line-height:1.4}
+.projlist .pp{color:var(--crit);font-weight:500}
 .tw{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;color:var(--ink-2)}
 .caret{display:inline-block;width:0;height:0;border-left:4px solid currentColor;border-top:3.5px solid transparent;border-bottom:3.5px solid transparent;transition:transform .14s;color:var(--muted);flex:none}
 tr.main[aria-expanded="true"] .caret{transform:rotate(90deg)}
@@ -219,6 +222,10 @@ tr.detail>td{background:var(--surface-2);padding:0 12px 14px;border-bottom:1px s
   background:color-mix(in srgb,var(--calm) 12%,transparent);color:var(--calm);
   white-space:nowrap;margin-left:5px}
 .gain b{font-weight:600}
+.newer{display:inline-block;font-family:var(--mono);font-size:10px;padding:1px 6px;border-radius:2px;
+  border:1px solid color-mix(in srgb,var(--high) 40%,var(--line));background:var(--high-soft);
+  color:var(--high);white-space:nowrap;margin-left:5px}
+.newer b{font-weight:600}
 /* labels du workload */
 .labs{display:flex;flex-wrap:wrap;gap:4px}
 .lab{display:inline-flex;align-items:baseline;gap:4px;font-family:var(--mono);font-size:10px;
@@ -255,11 +262,24 @@ a.ar:hover{border-bottom-color:var(--high)}
 table.ftab{min-width:0;width:100%;border-collapse:collapse;font-size:12px}
 table.ftab th,table.ftab td{display:table-cell!important;padding:4px 8px;border-bottom:1px solid var(--line-2);text-align:left;white-space:nowrap}
 table.ftab th{font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.03em}
+details.fwrap>summary{cursor:pointer}
+.vblock{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.vhead{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.vcnt{font-size:11.5px;color:var(--ink-2)}
+.vlist{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.vnext>span{margin-left:0}
 table.ftab td.fx{color:var(--calm);font-weight:600}
 table.ftab td.nofix{color:var(--muted)}
 table.ftab tr.ret td{opacity:.6}
 .sev{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:600;padding:0 5px;border-radius:2px}
 .sev.c{background:var(--crit-soft);color:var(--crit)} .sev.h{background:var(--high-soft);color:var(--high)}
+/* most recent version published in Artifact Registry */
+.latest{font-size:12px;color:var(--ink-2);margin:10px 0 8px;padding:8px 11px;border:1px solid var(--line);
+  border-left:3px solid var(--high);border-radius:3px;background:var(--surface);line-height:1.6}
+.latest.cur{border-left-color:var(--calm)}
+.latest .lk{font-family:var(--cond);font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-right:6px}
+.latest .ok{color:var(--calm);font-weight:600}
+.latest .inc{font-style:italic;color:var(--muted)}
 footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:11.5px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 </style>
 </head>
@@ -366,7 +386,7 @@ footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:v
 <section>
   <div class="shead">
     <h2>Plan de travail <span id="perbadge" hidden></span></h2>
-    <p>Une ligne par image déployée, la plus critique en premier. Chaque ligne est un rebuild à planifier.</p>
+    <p>Une ligne par image déployée, par ordre alphabétique. Chaque ligne est un rebuild à planifier.</p>
   </div>
   <div class="searchrow">
     <input id="q" type="search" autocomplete="off" spellcheck="false"
@@ -383,6 +403,8 @@ footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);color:v
     <button class="f" data-only="crit" aria-pressed="false">Critiques seulement</button>
     <button class="f" data-only="prod" aria-pressed="false">Production seulement</button>
     <button class="f" data-only="maj" aria-pressed="false" id="fmaj" hidden>Version plus saine disponible</button>
+    <label style="margin-left:10px" for="fdev">Dev</label>
+    <select id="fdev" class="per"></select>
   </div>
   <p style="color:var(--muted);font-size:12px;margin:-4px 0 10px">Cliquez une ligne pour voir où l'image tourne&nbsp;: projets, workloads, labels et liens console.</p>
   <div class="tscroll">
@@ -611,7 +633,11 @@ drawBars($('#cvebars'), cv, Math.max.apply(null,cv.map(function(c){return c.c;})
 })();
 
 /* --- plan de travail --- */
-var fRt='all', fCrit=false, fProd=false, fMaj=false, fQ='';
+var fRt='all', fCrit=false, fProd=false, fMaj=false, fQ='', fDev='';
+/* Same person, several spellings: "alice <alice@x.com>" and "alice" are
+   grouped on the name part, case-insensitive. */
+function devCle(n){return String(n||'').split('<')[0].replace(/\s+/g,' ').trim().toLowerCase();}
+function devDe(r){var d=r.dev||{}; return d.etat==='inconnu' ? '' : devCle(d.nom);}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 /* surligne les termes cherches dans un texte deja echappe */
 function surli(txt){
@@ -693,6 +719,60 @@ D.worklist.forEach(function(r){
   });
   r._idx = mots.join(' ').toLowerCase();
 });
+
+/* One line per image: every running version of the same image is grouped,
+   and the detail splits them by version and project. Counts are the union of
+   the findings of all versions, so a CVE shared by two versions counts once. */
+function nomImage(r){return String(r.img||'').split('/').pop();}
+function cmpVer(a,b){   /* newest-looking version first */
+  return String(b.ver||'').localeCompare(String(a.ver||''), 'fr', {numeric:true, sensitivity:'base'});
+}
+var GROUPES = (function(){
+  var par = {}, ordre = [];
+  D.worklist.forEach(function(r){
+    var k = nomImage(r).toLowerCase();
+    if(!par[k]){ par[k] = {img:nomImage(r), versions:[]}; ordre.push(k); }
+    par[k].versions.push(r);
+  });
+  return ordre.map(function(k){
+    var g = par[k], vs = g.versions.sort(cmpVer);
+    var connu = function(f){
+      return (vs.filter(function(v){return (v[f]||{}).etat && v[f].etat!=='inconnu';})[0] || vs[0])[f];
+    };
+    g.dev = connu('dev'); g.depot = connu('depot');
+    g.repo = vs.map(function(v){return v.repo;})
+      .filter(function(x,i,a){return x && a.indexOf(x)===i;}).join(', ');
+    var rts = vs.map(function(v){return v.rt;}).filter(function(x,i,a){return x && a.indexOf(x)===i;});
+    g.rt = rts.length===1 ? rts[0] : (rts.length ? 'MIXTE' : '');
+    g._n = vs.reduce(function(a,v){return a+v._n;},0);
+    g._prod = vs.some(function(v){return v._prod;});
+    g._projs = vs.reduce(function(a,v){
+      v._projs.forEach(function(p){if(a.indexOf(p)<0)a.push(p);}); return a;},[]).sort();
+    g._idx = vs.map(function(v){return v._idx;}).join(' ');
+    g.mieux = vs.some(function(v){return !!v.mieux;});
+    var dl = (vs.filter(function(v){return v.derniere;})[0] || vs[0]).derniere;
+    if(dl){   /* running if ANY of the grouped versions is that build */
+      g.derniere = Object.assign({}, dl, {en_service: vs.some(function(v){
+        return v.derniere && v.derniere.dig===dl.dig && v.derniere.en_service;})});
+    }
+    var vus = {}, cves = {}, c = 0, h = 0, fix = 0;
+    vs.forEach(function(v){ (v.findings||[]).forEach(function(f){
+      var cle = f.sev+'|'+f.cve+'|'+f.pkg+'|'+f.inst;
+      if(vus[cle]) return;
+      vus[cle] = 1; cves[f.cve] = 1;
+      if(f.sev==='CRITICAL') c++; else h++;
+      if(f.fixv) fix++;
+    });});
+    if(Object.keys(vus).length){
+      g.c = c; g.h = h; g.fix = fix; g.cve = Object.keys(cves).length;
+    } else {       /* findings missing: fall back to the worst version */
+      ['c','h','fix','cve'].forEach(function(f){
+        g[f] = Math.max.apply(null, vs.map(function(v){return v[f]||0;}));
+      });
+    }
+    return g;
+  });
+})();
 
 /* Detail : un bloc par projet, workloads cliquables avec leur tag. */
 /* Depot de code et responsable, chacun avec son niveau de certitude :
@@ -779,17 +859,18 @@ function detailHTML(r){
 
 /* Every Critical/High finding as the Google scanner rates it. This is the
    list a fix must clear: Trivy can rate the same CVE lower. */
+/* Collapsed by default: the summary line is enough to triage. */
 function findingsHTML(r){
   var fs = r.findings || [];
   if(!fs.length) return '';
   var os = fs.filter(function(f){return f.ptype==='OS' && f.fixv;}).length;
   var lib = fs.filter(function(f){return f.ptype!=='OS' && f.fixv;}).length;
   var none = fs.filter(function(f){return !f.fixv;}).length;
-  var sum = '<p class="fsum"><b>' + fs.length + ' finding' + (fs.length>1?'s':'')
+  var sum = '<summary class="fsum"><b>' + fs.length + ' finding' + (fs.length>1?'s':'')
     + ' Google</b> (Critical/High, notation GCP)'
     + (os ? ' · <b>' + os + '</b> paquet' + (os>1?'s':'') + ' OS corrigé' + (os>1?'s':'') + ' en amont (<span class="mono">apk upgrade</span> / rebuild)' : '')
     + (lib ? ' · <b>' + lib + '</b> dépendance' + (lib>1?'s':'') + ' applicative' + (lib>1?'s':'') + ' à monter' : '')
-    + (none ? ' · <b>' + none + '</b> sans correctif' : '') + '</p>';
+    + (none ? ' · <b>' + none + '</b> sans correctif' : '') + '</summary>';
   var rows = fs.map(function(f){
     var s = f.sev==='CRITICAL' ? 'c' : 'h';
     return '<tr' + (f.retire ? ' class="ret" title="INACTIVE dans SCC, toujours affiché par Artifact Registry"' : '') + '>'
@@ -801,9 +882,48 @@ function findingsHTML(r){
       + (f.fixv ? '<td class="mono fx">' + esc(f.fixv) + '</td>' : '<td class="nofix">aucun</td>')
       + '</tr>';
   }).join('');
-  return '<div class="fwrap">' + sum + '<table class="ftab"><thead><tr>'
+  return '<details class="fwrap">' + sum + '<table class="ftab"><thead><tr>'
     + '<th>Gravité</th><th>CVSS</th><th>CVE</th><th>Paquet</th><th>Installé</th><th>Corrigé en</th>'
-    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+    + '</tr></thead><tbody>' + rows + '</tbody></table></details>';
+}
+
+/* Detail of one running version: its tag and digest, its own counts, its
+   findings, then the projects and workloads that run it. */
+function versionHTML(r){
+  return '<div class="vblock"><div class="vhead">'
+    + (r.ver ? '<b class="vtag">:' + surli(r.ver) + '</b>'
+             : '<span class="vtag none">version non étiquetée</span>')
+    + driftHTML(r) + gainHTML(r)
+    + (r.ret ? ' <span class="vtag none" title="' + r.ret + ' des Critical/High de cette version sont '
+        + 'marquées INACTIVE dans SCC mais toujours affichées par Artifact Registry.">'
+        + (r.ret===r.c+r.h ? 'hors SCC' : r.ret + ' hors SCC') + '</span>' : '')
+    + ' <span class="mono vcnt"><span class="' + (r.c?'cn':'zero') + '">' + r.c + 'C</span> / '
+    + '<span class="' + (r.h?'hn':'zero') + '">' + r.h + 'H</span> · ' + r.cve + ' CVE · '
+    + r.fix + ' corrigeables</span>'
+    + ' <span class="tagd">' + surli(digCourt(r.dig)) + '</span>'
+    + (r.url ? ' <a class="ar" href="' + esc(r.url) + '" target="_blank" rel="noopener">registre</a>' : '')
+    + '</div>'
+    + findingsHTML(r) + detailHTML(r) + '</div>';
+}
+
+/* Most recent tagged version in the registry and its publication date,
+   whether or not it is less vulnerable than the running one. */
+function latestHTML(r){
+  var l = r.derniere;
+  if(!l) return '<div class="latest"><span class="lk">Dernière version publiée</span>'
+    + '<span class="inc">introuvable dans Artifact Registry</span></div>';
+  var autres = (l.tags||[]).filter(function(t){return t!==l.ver;});
+  var sev = l.c==null
+    ? ' · <span class="inc" title="aucune Critical/High remontée par le scanner Google : image saine, ou pas encore analysée">vulnérabilités non trouvées</span>'
+    : ' · <b class="'+(l.c?'cn':'')+'">'+l.c+'C</b> / <b class="'+(l.h?'hn':'')+'">'+l.h+'H</b>';
+  return '<div class="latest'+(l.en_service?' cur':'')+'">'
+    + '<span class="lk">Dernière version publiée</span>'
+    + '<b class="vtag">:'+surli(l.ver)+'</b>'
+    + (autres.length ? ' <span class="mono" style="font-size:11px">('+esc(autres.join(', '))+')</span>' : '')
+    + ' · publiée le <span class="mono">'+esc(l.cree)+'</span>'
+    + (l.en_service ? ' · <span class="ok">c\'est celle en service</span>' : sev
+        + ' · <span class="mono" title="'+esc(l.dig)+'">'+esc(digCourt(l.dig))+'</span>')
+    + '</div>';
 }
 
 /* Une version publiee apres celle en service, et que SCC trouve moins
@@ -820,6 +940,26 @@ function gainHTML(r){
     + ' dispo&nbsp;: <b>' + m.c + 'C / ' + m.h + 'H</b></span>';
 }
 
+/* The latest published version when it is not the one running, shown even
+   when SCC reports nothing on it. Skipped when the gain badge already names
+   that same version. */
+function newerHTML(r){
+  var l = r.derniere;
+  if(!l || l.en_service) return '';
+  if(r.mieux && r.mieux.ver && r.mieux.ver === l.ver) return '';
+  var connu = l.c != null;
+  var mieux = connu && (l.c < r.c || (l.c === r.c && l.h < r.h));
+  var t = 'Publiée le ' + l.cree + (connu
+    ? ', cette version porte ' + l.c + ' critique' + (l.c>1?'s':'') + ' et ' + l.h
+      + ' élevée' + (l.h>1?'s':'') + ', contre ' + r.c + ' et ' + r.h + ' pour '
+      + (r.ver ? ':' + r.ver : 'celle') + ' en service.'
+    : ". Le scanner Google ne remonte aucune vulnérabilité Critical/High dessus : "
+      + "image saine, ou pas encore analysée.");
+  return '<span class="' + (mieux ? 'gain' : 'newer') + '" title="' + esc(t) + '">:'
+    + surli(l.ver) + ' publiée le ' + esc(l.cree.slice(0,10)) + '&nbsp;: <b>'
+    + (connu ? l.c + 'C / ' + l.h + 'H' : 'vulnérabilités non trouvées') + '</b></span>';
+}
+
 /* Cloud Run distingue le gabarit du service (« Container image URL » dans la
    console) des revisions, figees sur un digest des leur creation. Les deux
    divergent des qu'une revision anterieure garde le trafic. */
@@ -833,11 +973,12 @@ function gabaritHTML(w){
 
 function render(){
   var termes = fQ.split(/\s+/).filter(Boolean);
-  var rows=D.worklist.filter(function(r){
+  var rows=GROUPES.filter(function(r){
     if(!(fRt==='all'||r.rt===fRt||r.rt==='MIXTE')) return false;
     if(fCrit && !(r.c>0)) return false;
     if(fProd && !r._prod) return false;
     if(fMaj && !r.mieux) return false;
+    if(fDev && (fDev==='__none__' ? devDe(r)!=='' : devDe(r)!==fDev)) return false;
     /* tous les termes doivent matcher : "openssl prod" affine */
     return termes.every(function(m){return r._idx.indexOf(m)>=0;});
   });
@@ -845,7 +986,7 @@ function render(){
   if(!rows.length){
     $('#tb').innerHTML='<tr><td colspan="8"><div class="vide">'
       +'<b>Aucune image ne correspond</b>'
-      +(fQ?'Rien ne contient « '+esc(fQ)+' »'+((fCrit||fProd||fMaj||fRt!=='all')?' avec les filtres actifs.':'.')
+      +(fQ?'Rien ne contient « '+esc(fQ)+' »'+((fCrit||fProd||fMaj||fDev||fRt!=='all')?' avec les filtres actifs.':'.')
           :'Essayez d\'élargir les filtres ou la période.')
       +'</div></td></tr>';
     $('#tcount').textContent='0 image';
@@ -853,29 +994,49 @@ function render(){
   }
 
   $('#tb').innerHTML=rows.map(function(r,i){
-    var np = r._projs.length;
+    var np = r._projs.length, vs = r.versions, seule = vs.length===1;
+    /* the versions, plus the ready revision that gets no traffic and the
+       less vulnerable build published since, when there are; the other
+       badges are told per version in the detail */
+    /* a better build that already runs elsewhere is not news: no badge */
+    var enService = vs.map(function(v){return v.ver;});
+    var gains = [];
+    var versions = vs.map(function(v){
+      var gain = v.mieux && enService.indexOf(v.mieux.ver)<0;
+      if(gain) gains.push(v.mieux.ver);
+      return '<span>'+(v.ver ? '<b class="vtag">:'+surli(v.ver)+'</b>'
+                             : '<span class="vtag none">non étiquetée</span>')
+        +(v.retard ? driftHTML(v) : '')+(gain ? gainHTML(v) : '')+'</span>';
+    }).join('');
+    /* the latest published version, once per image */
+    var newer = gains.indexOf((r.derniere||{}).ver)<0
+      ? newerHTML({derniere:r.derniere, c:vs[0].c, h:vs[0].h, ver:vs[0].ver}) : '';
     return '<tr class="main" data-i="'+i+'" tabindex="0" aria-expanded="false">'
       +'<td><div class="iname">'+surli(r.img)
-        +(r.ver?' <b class="vtag">:'+surli(r.ver)+'</b>'
-               :' <span class="vtag none">version non étiquetée</span>')
-        +driftHTML(r)+gainHTML(r)
-        +(r.ret?' <span class="vtag none" title="'+r.ret+' des Critical/High de cette image sont '
-          +'marquees INACTIVE dans SCC mais toujours affichees par Artifact Registry.">'
-          +(r.ret===r.c+r.h?'hors SCC':r.ret+' hors SCC')+'</span>':'')
+        +(seule ? '' : ' <span class="tagd">'+vs.length+' versions en service</span>')
         +'</div>'
+      +'<div class="vlist">'+versions+'</div>'
+      +(newer ? '<div class="vlist vnext">'+newer+'</div>' : '')+''
       +'<div class="repo">'+surli(r.repo)+'</div>'
-      +provHTML(r)
-      +'<div class="tagd">'+surli(digCourt(r.dig))+'</div></td>'
+      +provHTML(r)+'</td>'
       +'<td>'+rtPill(r.rt)+'</td>'
       +'<td><span class="tw"><span class="caret" aria-hidden="true"></span>'
         +r._n+' workload'+(r._n>1?'s':'')+' · '+np+' projet'+(np>1?'s':'')+'</span>'
-        +(r._prod?' <span class="prodbadge">PROD</span>':'')+'</td>'
+        +(r._prod?' <span class="prodbadge">PROD</span>':'')
+        +'<div class="projlist">'+r._projs.map(function(p){
+          var prod = vs.some(function(v){
+            return wlDe(v).some(function(w){return w.proj===p && w.prod;});});
+          return '<span'+(prod?' class="pp"':'')+'>'+surli(p)+'</span>';
+        }).join('')+'</div></td>'
       +'<td class="n '+(r.c?'cn':'zero')+'">'+r.c+'</td>'
       +'<td class="n '+(r.h?'hn':'zero')+'">'+r.h+'</td>'
       +'<td class="n">'+r.cve+'</td><td class="n">'+r.fix+'</td>'
-      +'<td>'+(r.url?'<a class="ar" href="'+esc(r.url)+'" target="_blank" rel="noopener">ouvrir</a>':'<span class="zero">—</span>')+'</td>'
+      +'<td>'+(seule && vs[0].url
+          ?'<a class="ar" href="'+esc(vs[0].url)+'" target="_blank" rel="noopener">ouvrir</a>'
+          :'<span class="zero">'+(seule?'—':'par version')+'</span>')+'</td>'
       +'</tr>'
-      +'<tr class="detail" data-d="'+i+'" hidden><td colspan="8">'+findingsHTML(r)+detailHTML(r)+'</td></tr>';
+      +'<tr class="detail" data-d="'+i+'" hidden><td colspan="8">'+latestHTML(r)
+      +vs.map(function(v){return versionHTML(v);}).join('')+'</td></tr>';
   }).join('');
 
   var basculer=function(tr){
@@ -899,11 +1060,13 @@ function render(){
       h=rows.reduce(function(a,r){return a+r.h;},0),
       wtot=rows.reduce(function(a,r){return a+r._n;},0),
       ptot=rows.reduce(function(a,r){r._projs.forEach(function(p){if(a.indexOf(p)<0)a.push(p);});return a;},[]).length;
+  var nver=rows.reduce(function(a,r){return a+r.versions.length;},0);
   $('#tcount').textContent=rows.length+' image'+(rows.length>1?'s':'')
+    +' ('+nver+' version'+(nver>1?'s':'')+' en service)'
     +(fQ?' correspondant à « '+fQ+' »':'')
     +' · '+c+' critiques · '+h+' élevées · '+wtot+' workloads dans '
     +ptot+' projet'+(ptot>1?'s':'')
-    +(rows.length<D.worklist.length?' (sur '+D.worklist.length+')':'');
+    +(rows.length<GROUPES.length?' (sur '+GROUPES.length+')':'');
 }
 /* Recherche : filtrage instantane cote client, sans requete. */
 (function(){
@@ -944,6 +1107,35 @@ Array.prototype.forEach.call(document.querySelectorAll('button.f'),function(b){
 (function(){
   var n = D.worklist.filter(function(r){return !!r.mieux;}).length;
   if(n) $('#fmaj').hidden = false;
+})();
+
+/* Headline counts follow the grouping: an image running in two versions is
+   one image to fix. */
+$('#k1').textContent = GROUPES.length;
+$('#k2').textContent = GROUPES.filter(function(g){return g.c>0;}).length;
+$('#v-img').textContent = GROUPES.length;
+
+/* Dev selector: one entry per person, with the number of images. */
+(function(){
+  var sel = $('#fdev'), groupes = {}, inconnus = 0;
+  GROUPES.forEach(function(r){
+    var k = devDe(r);
+    if(!k){ inconnus++; return; }
+    var g = groupes[k] = groupes[k] || {nom:'', n:0};
+    g.n++;
+    /* the shortest spelling, without the e-mail, reads best */
+    var nom = String(r.dev.nom).split('<')[0].trim();
+    if(!g.nom || nom.length < g.nom.length) g.nom = nom;
+  });
+  var cles = Object.keys(groupes).sort(function(a,b){
+    return groupes[a].nom.localeCompare(groupes[b].nom, 'fr', {sensitivity:'base'});
+  });
+  sel.innerHTML = '<option value="">Tous</option>'
+    + cles.map(function(k){
+        return '<option value="'+esc(k)+'">'+esc(groupes[k].nom)+' ('+groupes[k].n+')</option>';
+      }).join('')
+    + (inconnus ? '<option value="__none__">Responsable inconnu ('+inconnus+')</option>' : '');
+  sel.addEventListener('change', function(){ fDev = sel.value; render(); });
 })();
 
 render();
